@@ -1,0 +1,12 @@
+.opencode/
+.playwright-cli/
+plans/
+node_modules/
+e2e/artifacts/
+e2e/screenshots/
+e2e/probe-*.js
+e2e/*-fix-*.js
+e2e/phase2-verify.js
+e2e/phase2-ux-review.js
+Thumbs.db
+.DS_Store

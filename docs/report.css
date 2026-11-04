@@ -1,0 +1,289 @@
+/* Blurry Photo Cleaner — documentation report styles.
+   Visual tokens follow designs/design-spec.md §3–§5 (Apple-style, restrained):
+   grouped-background gray, white surfaces, hairlines, one blue accent,
+   system font stack — no webfonts, no gradients, no glows.
+   Screen = preview of the printed sheet; print = A4, 12 pt body. */
+
+:root {
+  /* §3.1 surfaces and text */
+  --color-bg: #F2F2F7;
+  --color-surface: #FFFFFF;
+  --color-text: #000000;
+  --color-text-secondary: #636366;
+  --color-text-muted: #6E6E73;
+  --color-hairline: rgba(0, 0, 0, 0.08);
+  --color-separator-strong: rgba(0, 0, 0, 0.15);
+  /* §3.2 accent (one accent only; text-safe variant on white) */
+  --color-accent-strong: #1E6EF4;
+  --color-accent-text: #0F4CBD;
+  /* §3.3 band colors (on-tint text variants) */
+  --color-band-blurry: #BB1125;
+  --color-band-review: #A34400;
+  --color-band-sharp: #007029;
+  /* §4.1 fonts */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* §5.2 radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  /* §5.3 depth (the only card shadow) */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+* { box-sizing: border-box; }
+
+html { font-family: var(--font-sans); }
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet {
+  max-width: 860px;
+  margin: 32px auto 64px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 64px 72px;
+}
+
+/* ── Headings ───────────────────────────────────────────────────────── */
+
+h2 {
+  font-size: 21px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-separator-strong);
+}
+
+h3 {
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 28px 0 10px;
+}
+
+p { margin: 0 0 12px; }
+
+a { color: var(--color-accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Part 1: title page ─────────────────────────────────────────────── */
+
+.part--title {
+  text-align: center;
+  padding: 96px 0 64px;
+}
+
+.title-kicker {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  margin-bottom: 96px;
+}
+
+.title-name {
+  font-size: 44px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+
+.title-sub {
+  font-size: 18px;
+  color: var(--color-text-secondary);
+  max-width: 34em;
+  margin: 0 auto 72px;
+}
+
+.title-meta {
+  margin: 0 auto;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.title-meta th,
+.title-meta td {
+  font-size: 15px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-hairline);
+  vertical-align: top;
+}
+
+.title-meta th {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  padding-right: 32px;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.title-meta td { min-width: 220px; }
+
+.title-note {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 72px;
+}
+
+/* ── Parts 2–5: content ─────────────────────────────────────────────── */
+
+.def-list dt {
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.def-list dd {
+  margin: 2px 0 0;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────── */
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0 8px;
+}
+
+table.data th,
+table.data td {
+  border: 1px solid var(--color-separator-strong);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+table.data th {
+  font-weight: 600;
+  background: var(--color-bg);
+}
+
+table.data .col-pass { white-space: nowrap; font-weight: 600; }
+
+table.data .row-sub {
+  font-weight: 400;
+  font-size: 0.85em;
+  color: var(--color-text-secondary);
+}
+
+.table-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  margin-top: 10px;
+}
+
+.table-note code,
+figcaption code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+/* ── Figures ────────────────────────────────────────────────────────── */
+
+figure {
+  margin: 24px 0;
+  text-align: center;
+  page-break-inside: avoid;
+}
+
+figure img,
+figure svg {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+}
+
+.fig-diagram svg { border: none; width: 100%; }
+
+figcaption {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+}
+
+figcaption .fig-label { font-weight: 600; color: var(--color-text-secondary); }
+
+/* ── Conclusion ─────────────────────────────────────────────────────── */
+
+.conclusion-list { padding-left: 0; list-style: none; margin: 0; }
+.conclusion-list li { margin-bottom: 14px; padding-left: 0; }
+.conclusion-list .point-label { font-weight: 600; }
+
+/* ── Print: A4, 12 pt body, page discipline ─────────────────────────── */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+
+  html { font-size: 12pt; }
+
+  body {
+    background: none;
+    font-size: 12pt;
+    line-height: 1.55;
+  }
+
+  .sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  p { orphans: 3; widows: 3; }
+
+  /* Each numbered part starts on a fresh page; the title page opens the document. */
+  .part { page-break-before: always; }
+  .part--title { page-break-before: auto; padding: 48mm 0 0; }
+  .part--title .title-kicker { margin-bottom: 40mm; }
+
+  h2 { font-size: 16pt; page-break-after: avoid; }
+  h3 { font-size: 13pt; page-break-after: avoid; }
+
+  table.data { font-size: 10pt; }
+  table.data th, table.data td { font-size: 10pt; padding: 5pt 6pt; }
+  tr { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+
+  figure { margin: 14pt 0; }
+  figure img { max-height: 95mm; width: auto; }
+  .figure--portrait img { max-height: 108mm; }
+  .figure--tall img { max-height: 118mm; }
+  .fig-diagram svg { width: 100%; }
+
+  figcaption { font-size: 10pt; }
+  .table-note { font-size: 9pt; }
+  .title-kicker, .title-sub { font-size: 12pt; }
+  .title-name { font-size: 30pt; }
+  .title-meta th, .title-meta td { font-size: 12pt; }
+  .title-note { font-size: 10pt; }
+}
+
+@media screen and (max-width: 720px) {
+  .sheet { padding: 32px 20px; margin: 0 0 32px; border-radius: 0; }
+  .part--title { padding: 48px 0 32px; }
+  .title-kicker { margin-bottom: 48px; }
+  .title-name { font-size: 32px; }
+}

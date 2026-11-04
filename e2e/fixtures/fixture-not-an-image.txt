@@ -1,0 +1,2 @@
+This file is deliberately not an image.
+The app must skip it with a visible counted message.

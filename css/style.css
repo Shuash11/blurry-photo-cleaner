@@ -1,0 +1,1488 @@
+/* ==========================================================================
+   Blurry Photo Cleaner — styles
+   Built to designs/design-spec.md (Phase 1 design of record).
+   Tokens below are the spec's named values, unchanged (§3–§6).
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Design tokens — color (§3)
+   -------------------------------------------------------------------------- */
+:root {
+  /* §3.1 Surfaces and text */
+  --color-bg: #F2F2F7;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F2F2F7;
+  --color-fill-pressed: #E5E5EA;
+  --color-text: #000000;
+  --color-text-secondary: #636366;
+  --color-text-muted: #6E6E73;
+  --color-hairline: rgba(0, 0, 0, 0.08);
+  --color-separator-strong: rgba(0, 0, 0, 0.15);
+  --color-hover-overlay: rgba(0, 0, 0, 0.04);
+
+  /* §3.2 Accent — one accent only; never as text color. Accent TEXT on
+     non-white surfaces uses --color-accent-text (§3.2 rule, Phase 2 fix F-1). */
+  --color-accent: #0088FF;
+  --color-accent-strong: #1E6EF4;
+  --color-accent-text: #0F4CBD;
+  --color-accent-subtle: rgba(0, 136, 255, 0.10);
+  --color-accent-press: #1A63DB;
+
+  /* §3.3 Band colors — text-safe and tint values (used from Phase 3 on).
+     Band TEXT on tints or the grouped background uses --color-band-*-text
+     (§3.3 rule, Phase 4 fix F1/F2): the base text values are certified on
+     white only and fail on the tinted chip composite. */
+  --color-band-blurry: #E9152D;
+  --color-band-review: #C55300;
+  --color-band-sharp: #008932;
+  --color-band-blurry-text: #BB1125;
+  --color-band-review-text: #A34400;
+  --color-band-sharp-text: #007029;
+  --color-band-blurry-tint: rgba(233, 21, 45, 0.10);
+  --color-band-review-tint: rgba(197, 83, 0, 0.10);
+  --color-band-sharp-tint: rgba(0, 137, 50, 0.10);
+
+  /* §3.4 Media stage and overlays (Phase 4: detail view) */
+  --color-stage: #1C1C1E;
+  --color-stage-text: #FFFFFF;
+  --color-scrim: rgba(0, 0, 0, 0.44);
+  /* §8.2 stage band tokens: the light-appearance band text values fail
+     contrast on the dark stage, so the detail chip uses these dark-mode
+     HIG variants (all ≥≈4.9:1 on #1C1C1E). Stage-only. */
+  --color-band-blurry-stage: #FF4245;
+  --color-band-review-stage: #FFA056;
+  --color-band-sharp-stage: #4AD968;
+
+  /* --------------------------------------------------------------------------
+     Design tokens — typography (§4). System fonts only; no webfonts, ever.
+     -------------------------------------------------------------------------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale (§4.2), rem on a 16px root. Weight 400/600 only. */
+  --text-large-title: 2.125rem;   --line-large-title: 2.5625rem;  --track-large-title: 0.012em;  /* 34/41 */
+  --text-title-1: 1.75rem;        --line-title-1: 2.125rem;       --track-title-1: 0.014em;      /* 28/34, reserved */
+  --text-title-2: 1.375rem;       --line-title-2: 1.75rem;        --track-title-2: -0.012em;     /* 22/28 */
+  --text-title-3: 1.25rem;        --line-title-3: 1.5625rem;      --track-title-3: -0.025em;     /* 20/25 */
+  --text-headline: 1.0625rem;     --line-headline: 1.375rem;      --track-headline: -0.026em;    /* 17/22 */
+  --text-body: 1.0625rem;         --line-body: 1.375rem;          --track-body: -0.026em;        /* 17/22 */
+  --text-callout: 1rem;           --line-callout: 1.3125rem;      --track-callout: -0.031em;     /* 16/21 */
+  --text-subhead: 0.9375rem;      --line-subhead: 1.25rem;        --track-subhead: -0.016em;     /* 15/20 */
+  --text-footnote: 0.8125rem;     --line-footnote: 1.125rem;      --track-footnote: -0.006em;    /* 13/18 */
+  --text-caption-1: 0.75rem;      --line-caption-1: 1rem;         --track-caption-1: 0;          /* 12/16 */
+  --text-caption-2: 0.6875rem;    --line-caption-2: 0.8125rem;    --track-caption-2: 0.006em;    /* 11/13 */
+
+  /* --------------------------------------------------------------------------
+     Design tokens — spacing (§5.1, 4px grid), radius (§5.2), depth (§5.3)
+     -------------------------------------------------------------------------- */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  --space-64: 64px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-floating: 0 8px 24px rgba(0, 0, 0, 0.06);
+
+  /* --------------------------------------------------------------------------
+     Design tokens — motion (§6). Only color/background-color/border-color/
+     opacity/transform are ever transitioned.
+     -------------------------------------------------------------------------- */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-standard: 200ms;
+  --duration-slow: 320ms;
+  --duration-stagger: 50ms;
+
+  /* Shell metrics (§7.1: header 44–52px tall on all breakpoints) */
+  --header-h: 48px;
+  --page-pad: var(--space-16);
+}
+
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+  letter-spacing: var(--track-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  display: block;
+}
+
+/* The hidden attribute must always win over author display rules: the
+   "Start over" text button is display:inline-flex, and without this guard
+   it stays visible in the empty state even when marked [hidden] (§9a —
+   the header carries no action there). */
+[hidden] {
+  display: none !important;
+}
+
+.svg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.icon--mark {
+  width: 16px;
+  height: 16px;
+  color: var(--color-accent-strong);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Single visible focus style (§12): :focus-visible only, never on pointer clicks. */
+:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Page shell (§7.1): sticky translucent header, hairline bottom
+   -------------------------------------------------------------------------- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  min-height: var(--header-h);
+  padding: var(--space-8) var(--page-pad);
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+@supports not ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+  .app-header {
+    background: var(--color-surface);
+  }
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  font-size: var(--text-headline);
+  line-height: var(--line-headline);
+  letter-spacing: var(--track-headline);
+  font-weight: 600;
+}
+
+.app-mark {
+  display: inline-flex;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons (§8.1). Labels are verbs, no trailing periods.
+   -------------------------------------------------------------------------- */
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  min-height: 44px;
+  padding: 0 var(--space-16);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-headline);
+  line-height: var(--line-headline);
+  letter-spacing: var(--track-headline);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-standard);
+}
+
+.btn-primary {
+  background: var(--color-accent-strong);
+  color: var(--color-surface);
+}
+
+@media (hover: hover) {
+  .btn-primary:hover {
+    /* "fill lightens 4%" (§8.1): accent-strong #1E6EF4 toward white */
+    background: #2774F4;
+  }
+}
+
+.btn-primary:active {
+  background: var(--color-accent-press);
+  transform: scale(0.98);
+}
+
+.btn-secondary {
+  background: var(--color-surface-muted);
+  border-color: var(--color-hairline);
+  color: var(--color-text);
+}
+
+@media (hover: hover) {
+  .btn-secondary:hover {
+    background: var(--color-fill-pressed);
+  }
+}
+
+.btn-secondary:active {
+  background: var(--color-fill-pressed);
+  transform: scale(0.98);
+}
+
+/* Empty-state primary is 48px tall (§9a) with desktop side padding (§8.1). */
+.btn-hero {
+  min-height: 48px;
+  padding: 0 var(--space-20);
+}
+
+/* Text button (§8.1) */
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: var(--text-headline);
+  line-height: var(--line-headline);
+  letter-spacing: var(--track-headline);
+  font-weight: 600;
+  color: var(--color-accent-strong);
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .btn-text:hover {
+    text-decoration: underline;
+  }
+}
+
+.btn-text:active {
+  opacity: 0.7;
+}
+
+.btn-text:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Accent text on non-white surfaces (§3.2 rule, Phase 2 fix F-1): these text
+   buttons sit on the translucent header and the grouped background, never on
+   a white card, so they use the darker --color-accent-text (#0F4CBD ≥4.5:1 on
+   both, including content scrolled beneath the header). Text buttons on white
+   surfaces (notice "Dismiss") keep --color-accent-strong. */
+.app-header .btn-text,
+.gallery-toolbar .btn-text {
+  color: var(--color-accent-text);
+}
+
+.btn-primary:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+/* UX F7 (§8.1 Buttons, Disabled column: "as primary"): the secondary gets
+   the same treatment — muted fill and label, no pointer. The fill token is
+   already .btn-secondary's base fill; it is stated here so the rule reads
+   as the exact mirror of .btn-primary:disabled. */
+.btn-secondary:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Content area = the drop zone (§8.2). Drag feedback: fill shifts to
+   --color-accent-subtle, border to accent (§6.2), --duration-fast.
+   -------------------------------------------------------------------------- */
+.content {
+  position: relative;
+  padding: var(--space-16) var(--page-pad) calc(var(--space-48) + env(safe-area-inset-bottom));
+  background-color: transparent;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.content.is-dragover {
+  background-color: var(--color-accent-subtle);
+}
+
+/* Drag ring: fades in via opacity (§6.1 permits transitioning opacity;
+   the ring itself is a border, so no colored shadow is involved). */
+.content::after {
+  content: "";
+  position: absolute;
+  inset: var(--space-8);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.content.is-dragover::after {
+  opacity: 1;
+}
+
+.view-root {
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Empty / upload state (§9a). The card boundary is invisible; whitespace
+   composes it. Without folder-pick support the secondary button is absent
+   from the DOM entirely (§11) — the layout does not shift.
+   -------------------------------------------------------------------------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-64) 0 var(--space-48);
+}
+
+.empty-state__icon {
+  display: inline-flex;
+  color: var(--color-text-muted);
+}
+
+.empty-state__icon .icon {
+  width: 40px;
+  height: 40px;
+}
+
+/* All-failed variant (§9e): warning icon in the review-orange family, never red. */
+.empty-state--failed .empty-state__icon {
+  color: var(--color-band-review);
+}
+
+.empty-state__title {
+  margin: var(--space-24) 0 0;
+  font-size: var(--text-large-title);
+  line-height: var(--line-large-title);
+  letter-spacing: var(--track-large-title);
+  font-weight: 400;
+}
+
+.empty-state--failed .empty-state__title {
+  font-size: var(--text-title-2);
+  line-height: var(--line-title-2);
+  letter-spacing: var(--track-title-2);
+}
+
+.empty-state__body {
+  margin: var(--space-16) 0 0;
+  max-width: 30ch;
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+  letter-spacing: var(--track-body);
+  color: var(--color-text-secondary);
+}
+
+.empty-state__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-32);
+}
+
+.empty-state__drop-hint {
+  margin: var(--space-16) 0 0;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  letter-spacing: var(--track-subhead);
+  color: var(--color-text-muted);
+}
+
+/* Drag-and-drop cannot happen without a hover-capable pointer (§7.3
+   pointer-vs-touch, NN/g): hide the drop hint on touch devices, keep it on
+   desktop. Same pointer-vs-touch family as the (hover: hover) guards above. */
+@media (hover: none), (pointer: coarse) {
+  .empty-state__drop-hint {
+    display: none;
+  }
+}
+
+.empty-state__privacy {
+  margin: var(--space-48) 0 0;
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  letter-spacing: var(--track-caption-1);
+  color: var(--color-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Gallery state (§9b structure, pre-analysis): section toolbar, thumbnail grid.
+   -------------------------------------------------------------------------- */
+.gallery-toolbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-16);
+  max-width: 960px;
+  margin: var(--space-8) auto var(--space-12);
+}
+
+.gallery-toolbar__label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  margin: 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.gallery-toolbar__count {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+/* Toolbar action mirrors the band-header "Select all" pattern (§8.1).
+   Touch target ≥44px on mobile (§12); 32px with generous spacing on
+   pointer devices (§7.3) — the 32px override lives in the ≥768px block. */
+.gallery-toolbar .btn-text {
+  min-height: 44px;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Photo tile (§8.1 anatomy, Phase 2: thumbnails + meta; selection/detail
+   targets arrive in Phase 4). Square, object-fit cover, --radius-md. */
+.tile {
+  margin: 0;
+  min-width: 0;
+}
+
+.tile__photo {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.tile__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile__filename {
+  margin-top: var(--space-4);
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  letter-spacing: var(--track-caption-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin-top: var(--space-2);
+}
+
+.tile__size {
+  font-size: var(--text-caption-2);
+  line-height: var(--line-caption-2);
+  letter-spacing: var(--track-caption-2);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+/* Score chip (§8.1) — the app's signature element. Pending state: muted dot
+   + "—" so the grid height never jumps when scores land in Phase 3. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-fill-pressed);
+}
+
+/* --------------------------------------------------------------------------
+   Notice cards (§8.2, §9e) — hairline cards, never modals, never toasts.
+   Warnings use the review-orange family; red stays reserved for the
+   blurry verdict and blocked errors. Entrance: fade only.
+   -------------------------------------------------------------------------- */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  max-width: 960px;
+  margin: 0 auto var(--space-24);
+  padding: var(--space-16);
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  animation: notice-in var(--duration-standard) var(--ease-standard);
+}
+
+@keyframes notice-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.notice__icon {
+  margin-top: var(--space-2);
+  color: var(--color-band-review);
+}
+
+.notice__icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.notice__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notice__heading {
+  margin: 0;
+  font-size: var(--text-title-3);
+  line-height: var(--line-title-3);
+  letter-spacing: var(--track-title-3);
+  font-weight: 600;
+}
+
+.notice__body {
+  margin: var(--space-8) 0 0;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  letter-spacing: var(--track-subhead);
+  color: var(--color-text-secondary);
+}
+
+.notice__details {
+  margin-top: var(--space-12);
+}
+
+.notice__summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* touch target on mobile (§12); 32px on pointer devices below */
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  color: var(--color-accent-strong);
+  cursor: pointer;
+  list-style: none;
+}
+
+.notice__summary::-webkit-details-marker {
+  display: none;
+}
+
+.notice__filelist {
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+}
+
+.notice__filelist li {
+  padding: var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+
+.notice__helper {
+  margin: var(--space-12) 0 0;
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  letter-spacing: var(--track-caption-1);
+  color: var(--color-text-muted);
+}
+
+.notice__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-12);
+}
+
+.notice__footer .btn-text {
+  min-height: 44px;
+}
+
+/* --------------------------------------------------------------------------
+   Phase 4 — §9b analysis progress card
+   -------------------------------------------------------------------------- */
+.progress-card {
+  max-width: 560px;
+  margin: var(--space-8) auto var(--space-24);
+  padding: var(--space-16);
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.progress-card__heading {
+  margin: 0;
+  font-size: var(--text-title-3);
+  line-height: var(--line-title-3);
+  letter-spacing: var(--track-title-3);
+  font-weight: 600;
+}
+
+.progress-card__status {
+  margin: var(--space-8) 0 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+/* Determinate bar: 4px, track rgba(0,0,0,0.06), accent fill moved with
+   scaleX only — never width (§6.1). */
+.progress-card__bar {
+  height: 4px;
+  margin-top: var(--space-12);
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.progress-card__fill {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-standard) var(--ease-standard);
+}
+
+/* --------------------------------------------------------------------------
+   Phase 4 — §9c grouped results
+   -------------------------------------------------------------------------- */
+.results {
+  padding-bottom: 176px; /* clearance for the fixed action bar (+ safe area below) */
+}
+
+.band {
+  margin-top: var(--space-32);
+}
+
+.band__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-bottom: var(--space-12);
+}
+
+/* Band chip = the section heading (h2): tint fill, radius-sm, band text
+   color, 8px dot in the band text color (§3.3, §8.1). Text on the tint
+   composite uses --color-band-*-text (§3.3 rule, Phase 4 fix F1). */
+.band-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-weight: 600;
+}
+
+.band-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+.band-chip--blurry {
+  color: var(--color-band-blurry-text);
+  background: var(--color-band-blurry-tint);
+}
+
+.band-chip--review {
+  color: var(--color-band-review-text);
+  background: var(--color-band-review-tint);
+}
+
+.band-chip--sharp {
+  color: var(--color-band-sharp-text);
+  background: var(--color-band-sharp-tint);
+}
+
+/* Skipped photos are not a band: neutral chip, no tint (§3.5 — color
+   signals verdicts; a skip is the absence of one). */
+.band-chip--skipped {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-muted);
+}
+
+.band__count {
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.band__toggle {
+  margin-left: auto;
+  min-height: 44px;
+  color: var(--color-accent-text); /* §3.2: accent text on a non-white surface */
+}
+
+.band__empty {
+  margin: 0;
+  padding: var(--space-8) 0;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  letter-spacing: var(--track-subhead);
+  color: var(--color-text-muted);
+}
+
+/* §6.2 band reveal: section fades in and rises 8px (--duration-slow),
+   staggered by --duration-stagger between items, at most six items.
+   Tile delays are set inline by ResultsView (0–5 × 50ms). */
+.band--reveal {
+  animation: band-reveal var(--duration-slow) var(--ease-standard) backwards;
+}
+
+.band--reveal .tile {
+  animation: band-reveal var(--duration-slow) var(--ease-standard) backwards;
+}
+
+@keyframes band-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Phase 4 — §8.1 photo tile, results anatomy (two targets, one tile)
+   -------------------------------------------------------------------------- */
+.results .tile__photo {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: var(--color-surface-muted);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.results .tile__photo:active {
+  transform: scale(0.98);
+}
+
+/* Selected: 2px inset accent ring (instant, §6.2) + accent-subtle tint
+   overlay + 20px check badge (scales 0.9 → 1). */
+.results .tile__photo.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-accent-strong);
+}
+
+.results .tile__photo.is-selected::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-accent-subtle);
+}
+
+.tile__check {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-strong);
+  color: var(--color-surface);
+  pointer-events: none; /* the badge is not a separate target (§12) */
+}
+
+.tile__check .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.results .tile__photo.is-selected .tile__check {
+  display: inline-flex;
+  animation: check-pop var(--duration-standard) var(--ease-standard);
+}
+
+@keyframes check-pop {
+  from {
+    transform: scale(0.9);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Meta row button (opens §9d): ≥44px touch target on mobile. */
+.tile__meta-btn {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) 0 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.results .tile__filename {
+  display: block;
+  color: var(--color-text);
+}
+
+.tile__meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin-top: var(--space-2);
+}
+
+/* §6.3: hover is an overlay change only, never a scale — pointer only. */
+@media (hover: hover) {
+  .results .tile__photo:hover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--color-hover-overlay);
+  }
+}
+
+/* §8.1 score chip states: 8px band-color dot + number in the band text
+   value. On the grouped background the number uses --color-band-*-text
+   (§3.3 rule, Phase 4 fix F2); the dot keeps the band color. Pending
+   keeps the muted dot + "—". */
+.chip--blurry {
+  color: var(--color-band-blurry-text);
+}
+
+.chip--blurry .chip__dot {
+  background: var(--color-band-blurry);
+}
+
+.chip--review {
+  color: var(--color-band-review-text);
+}
+
+.chip--review .chip__dot {
+  background: var(--color-band-review);
+}
+
+.chip--sharp {
+  color: var(--color-band-sharp-text);
+}
+
+.chip--sharp .chip__dot {
+  background: var(--color-band-sharp);
+}
+
+/* --------------------------------------------------------------------------
+   Phase 4 — §8.1/§9c action bar
+   -------------------------------------------------------------------------- */
+.action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  padding: var(--space-12) var(--page-pad) calc(var(--space-12) + env(safe-area-inset-bottom));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-hairline);
+  box-shadow: var(--shadow-floating);
+  animation: notice-in var(--duration-standard) var(--ease-standard);
+}
+
+.action-bar__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+.action-bar__summary {
+  margin: 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.action-bar__actions {
+  display: flex;
+  gap: var(--space-12);
+}
+
+.action-bar__actions .btn-primary {
+  flex: 1;
+}
+
+/* §13 device-reality copy: the app cannot delete from the phone. */
+.action-bar__device-note {
+  max-width: 1200px;
+  margin: var(--space-8) 0 0;
+  text-align: center;
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  letter-spacing: var(--track-caption-1);
+  color: var(--color-text-muted);
+}
+
+/* §6.2: the one looping animation — 16px inline spinner, 1s linear —
+   permitted because it communicates in-progress state (download busy). */
+.spinner {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: var(--color-surface);
+  animation: spinner-rotate 1s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Phase 4 — §8.2/§9d detail view (sheet on mobile, modal on desktop)
+   -------------------------------------------------------------------------- */
+.detail {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-scrim);
+  animation: detail-fade var(--duration-slow) var(--ease-standard);
+}
+
+@keyframes detail-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.detail__panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--color-stage);
+  color: var(--color-stage-text);
+  outline: none;
+  animation: sheet-rise var(--duration-slow) var(--ease-standard);
+}
+
+/* §9d: full-screen sheet slides up 24px and fades on mobile. */
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.detail__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 52px;
+  padding: var(--space-8) var(--space-16);
+}
+
+.detail__done {
+  color: var(--color-stage-text);
+  flex-shrink: 0;
+}
+
+.detail__filename {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-headline);
+  line-height: var(--line-headline);
+  letter-spacing: var(--track-headline);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-stage-text);
+}
+
+.detail__select {
+  flex-shrink: 0;
+}
+
+/* §9d: the check glyph shows only while the toggle is on. SVG elements
+   don't reflect the [hidden] attribute, so visibility is class-toggled
+   (is-selected), the same pattern as the grid tile's badge. */
+.detail__select-check {
+  display: none;
+  width: 16px;
+  height: 16px;
+}
+
+.detail__select.is-selected .detail__select-check {
+  display: inline-block;
+}
+
+.detail__stage-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 0;
+  padding: var(--space-8) var(--space-16);
+}
+
+.detail__stage {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.detail__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Prev/next chevrons flank the stage, desktop only (§7.3). */
+.detail__nav {
+  display: none;
+}
+
+/* §9d mobile: "‹ swipe ›" hint under the stage. The chevron glyphs are
+   compact prev/next buttons (same actions and accessible names as the
+   desktop chevrons) so navigation stays keyboard-reachable at mobile
+   widths, where the flanking chevrons are display:none. */
+.detail__hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-16);
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  color: var(--color-stage-text);
+}
+
+/* Touch floor (§7.3, WCAG 2.5.8): the hit box is a 44x44 border-box; the
+   symmetric negative margin returns the layout footprint to the original
+   32x32 pill so the §9d hint row looks unchanged. The hover circle keeps
+   its 32px visual size via the ::before layer (painted behind the glyph,
+   exactly where the old button background sat). */
+.detail__hint-nav {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  margin: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-stage-text);
+  cursor: pointer;
+}
+
+.detail__hint-nav .icon {
+  position: relative; /* keeps the glyph above the ::before hover circle */
+  width: 16px;
+  height: 16px;
+}
+
+/* 32px visual circle (the old hover background), inset 6px inside the
+   44px hit box; pointer-events: none keeps the whole hit box clickable. */
+.detail__hint-nav::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  pointer-events: none;
+}
+
+.detail__hint-nav:hover:not(:disabled)::before {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.detail__hint-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+}
+
+.detail__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16) calc(var(--space-12) + env(safe-area-inset-bottom));
+}
+
+/* Stage chip: dot + number + band word in the stage band tokens (§8.2). */
+.detail__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-stage-text);
+}
+
+.detail__chip-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-fill-pressed);
+}
+
+.detail__chip-word {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail__chip--blurry {
+  color: var(--color-band-blurry-stage);
+}
+
+.detail__chip--blurry .detail__chip-dot {
+  background: var(--color-band-blurry-stage);
+}
+
+.detail__chip--review {
+  color: var(--color-band-review-stage);
+}
+
+.detail__chip--review .detail__chip-dot {
+  background: var(--color-band-review-stage);
+}
+
+.detail__chip--sharp {
+  color: var(--color-band-sharp-stage);
+}
+
+.detail__chip--sharp .detail__chip-dot {
+  background: var(--color-band-sharp-stage);
+}
+
+/* §12: on the dark stage the focus ring uses the stage text color. */
+.detail :focus-visible {
+  outline-color: var(--color-stage-text);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive system (§7.2, §7.3). Mobile-first, 375px design base.
+   -------------------------------------------------------------------------- */
+@media (min-width: 480px) {
+  .photo-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (min-width: 640px) {
+  .photo-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --page-pad: var(--space-24);
+  }
+
+  .photo-grid { grid-template-columns: repeat(7, 1fr); }
+
+  /* Text content caps at 960px (§7.1). The photo grid itself runs wider —
+     the view-root keeps its 1200px cap so the grid reaches it (§7.1, §9c),
+     and the gallery toolbar aligns to the grid edge like §8.1 band headers.
+     The undecodable notice spans the 960px content width (§9e desktop note). */
+  .notice {
+    max-width: 960px;
+  }
+
+  .gallery-toolbar {
+    max-width: 1200px;
+  }
+
+  /* Pointer-device control sizes (§7.3, §8.1): 32px min-height with
+     generous spacing. The hero CTA keeps its 48px height. */
+  .btn-primary,
+  .btn-secondary {
+    min-height: 36px;
+  }
+
+  .gallery-toolbar .btn-text,
+  .notice__summary {
+    min-height: 32px;
+  }
+
+  /* Phase 4 results (§7.3): band toggles and tile meta buttons get the
+     pointer-device size; the action bar becomes a floating dock row. */
+  .band__toggle,
+  .tile__meta-btn {
+    min-height: 32px;
+  }
+
+  .results {
+    padding-bottom: 128px;
+  }
+
+  .action-bar__row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-24);
+  }
+
+  .action-bar__actions .btn-primary {
+    flex: 0 1 auto;
+  }
+
+  /* Detail view: centered modal, max 960×640, over the scrim (§9d).
+     Fades and scales 0.98 → 1 instead of the mobile sheet rise.
+     Elevation per §5.3: --shadow-floating belongs to the action bar and
+     the desktop modal. */
+  .detail__panel {
+    width: min(960px, calc(100vw - 48px));
+    height: min(640px, calc(100vh - 48px));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-floating);
+    animation-name: modal-pop;
+  }
+
+  @keyframes modal-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Desktop title bar: filename left, then Select, then Done (§9d wireframe)
+     — the same DOM reordered with flex order. */
+  .detail__filename {
+    order: 1;
+    text-align: left;
+  }
+
+  .detail__select {
+    order: 2;
+  }
+
+  .detail__done {
+    order: 3;
+  }
+
+  .detail__nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--color-stage-text);
+    cursor: pointer;
+  }
+
+  .detail__nav:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .detail__nav:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  /* Desktop has no hint: chevrons flank the stage instead (§9d wireframe). */
+  .detail__hint {
+    display: none;
+  }
+
+  /* Empty state: card centers vertically, gains max-width 480px;
+     the two buttons sit side by side (§7.3, §9a). */
+  .empty-state {
+    justify-content: center;
+    min-height: calc(100svh - var(--header-h));
+    max-width: 480px;
+    margin-inline: auto;
+    padding: var(--space-32) 0;
+  }
+
+  .empty-state__actions {
+    flex-direction: row;
+  }
+
+  .btn-hero {
+    min-height: 48px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .photo-grid { grid-template-columns: repeat(8, 1fr); }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --page-pad: var(--space-32);
+  }
+
+  .photo-grid { grid-template-columns: repeat(9, 1fr); }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion (§12): all transitions/animations collapse to 1ms.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+
+  /* §12 disables the band reveal and sheet rise outright — collapsing the
+     duration to 1ms is not enough: ResultsView sets inline animation-delay
+     staggers (0–250ms) on .band--reveal sections and their tiles, and inline
+     delays survive the duration collapse while fill-mode: backwards holds
+     each element at opacity 0 / translateY(8px), so the staggered cascade
+     still runs. animation: none also resets delay/fill, and !important
+     overrides those inline delays. .detail__panel carries sheet-rise (§9d,
+     mobile) and its desktop modal-pop swap. */
+  .band--reveal,
+  .band--reveal .tile,
+  .detail__panel {
+    animation: none !important;
+  }
+}

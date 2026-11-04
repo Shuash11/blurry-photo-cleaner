@@ -1,0 +1,1 @@
+{"name":"blurry-photo-cleaner-e2e","version":"0.1.0","private":true,"description":"Test tooling only - the app itself stays dependency-free (design-spec 14.1).","scripts":{"phase2":"node phase2-verify.js"},"dependencies":{"playwright":"^1.64.1"}}

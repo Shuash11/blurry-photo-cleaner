@@ -1,0 +1,109 @@
+# Static check: serve the repo root over HTTP and assert that the pages and
+# every locally referenced asset return HTTP 200.
+#
+# Why (plans/blurry-photo-cleaner.md -> Push Confirmation Record, decision 4):
+# the site goes public via GitHub Pages, where a broken asset reference 404s
+# silently. Green CI is the gate that closes the plan.
+#
+# Constraints: no build step, no browser, no package install. The job only uses
+# the preinstalled python3 static server plus curl, so it finishes in seconds.
+
+name: Static Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# The job only reads the checked-out tree.
+permissions:
+  contents: read
+
+jobs:
+  static-check:
+    name: Serve repo root and assert HTTP 200
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # python3 ships with the ubuntu-latest image, so the server needs no install.
+      # --directory . serves the repo root, where index.html lives.
+      - name: Start static file server
+        run: |
+          nohup python3 -m http.server 8000 --bind 127.0.0.1 --directory . > server.log 2>&1 &
+          echo $! > server.pid
+          disown || true
+
+          # Wait until the server accepts requests before asserting any URL.
+          for attempt in {1..20}; do
+            if curl -sf -o /dev/null "http://127.0.0.1:8000/"; then
+              echo "Static server is up (after ${attempt} attempt(s))."
+              exit 0
+            fi
+            if [ "${attempt}" -eq 20 ]; then
+              echo "::error::Static server did not start; see server.log"
+              cat server.log || true
+              exit 1
+            fi
+            sleep 0.25
+          done
+
+      # The list below is derived from the actual references in the repo:
+      #   index.html       -> css/style.css, js/main.js, assets/mark.svg
+      #   js/main.js       -> App, PhotoStore, UploadView
+      #   (transitively)   -> ResultsView, ReviewControls, BlurAnalyzer,
+      #                       Thresholds, and blur-worker.js (module worker
+      #                       loaded by BlurAnalyzer via new URL(...))
+      #   docs/report.html -> docs/report.css, docs/assets/figure1-system-flow.svg,
+      #                       docs/assets/screenshot-1..5-*.png
+      - name: Assert every referenced URL returns HTTP 200
+        run: |
+          urls=(
+            "/"
+            "/index.html"
+            "/css/style.css"
+            "/js/main.js"
+            "/js/App.js"
+            "/js/PhotoStore.js"
+            "/js/UploadView.js"
+            "/js/ResultsView.js"
+            "/js/ReviewControls.js"
+            "/js/BlurAnalyzer.js"
+            "/js/Thresholds.js"
+            "/js/blur-worker.js"
+            "/assets/mark.svg"
+            "/docs/report.html"
+            "/docs/report.css"
+            "/docs/assets/figure1-system-flow.svg"
+            "/docs/assets/screenshot-1-empty.png"
+            "/docs/assets/screenshot-2-analyzing.png"
+            "/docs/assets/screenshot-3-results.png"
+            "/docs/assets/screenshot-4-selected.png"
+            "/docs/assets/screenshot-5-detail.png"
+          )
+
+          failed=0
+          for url in "${urls[@]}"; do
+            status=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000${url}" || true)
+            if [ "${status}" = "200" ]; then
+              echo "OK   ${status} ${url}"
+            else
+              echo "::error::Expected HTTP 200 for ${url}, got ${status}"
+              failed=1
+            fi
+          done
+
+          exit "${failed}"
+
+      # Always stop the background server, even if the assertions failed.
+      - name: Stop static file server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill "$(cat server.pid)" 2>/dev/null || true
+            rm -f server.pid
+          fi
