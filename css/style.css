@@ -405,6 +405,8 @@ img {
   align-items: center;
   text-align: center;
   padding: var(--space-64) 0 var(--space-48);
+  /* Motion pass: the empty state rises in once per render (§6.2). */
+  animation: rise-in var(--duration-slow) var(--ease-standard);
 }
 
 .empty-state__icon {
@@ -533,6 +535,14 @@ img {
   overflow: hidden;
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
+  /* Motion pass (§6.2 press feedback — the allowed list): a quick press
+     dip on the photo area; transform only, fast, reduced-motion collapses
+     the duration to 1ms via the global rule. */
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.tile__photo:active {
+  transform: scale(0.98);
 }
 
 .tile__photo img {
@@ -735,6 +745,9 @@ img {
    -------------------------------------------------------------------------- */
 .results {
   padding-bottom: 176px; /* clearance for the fixed action bar (+ safe area below) */
+  /* Motion pass: the results surface fades and rises once per entrance
+     (the band reveal staggers inside it; §6.2 entrance family). */
+  animation: rise-in var(--duration-slow) var(--ease-standard);
 }
 
 /* §11.2 percentage subtitle — one instance per results view, directly above
@@ -815,7 +828,14 @@ img {
 .band__toggle {
   margin-left: auto;
   min-height: 44px;
-  color: var(--color-accent); /* design-spec-v2 §5: one accent on every surface */
+  /* Hierarchy pass (2026-11-06): a band utility toggle is a tertiary
+     control — footnote size, regular weight, secondary ink. The accent
+     stays reserved for the primary download + selection + focus (§4.2);
+     an accent toggle here competed with the band chip and the CTA. */
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  font-weight: 400;
+  color: var(--color-text-secondary);
 }
 
 .band__empty {
@@ -928,6 +948,11 @@ img {
 .results .tile__filename {
   display: block;
   color: var(--color-text);
+  /* R6.1 hierarchy pass: buttons never inherit fonts — pin the filename to
+     the footnote token instead of the UA's 13.33px default. */
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  font-weight: 400;
 }
 
 .tile__meta-row {
@@ -988,6 +1013,9 @@ img {
   padding: var(--space-12) var(--page-pad) calc(var(--space-12) + env(safe-area-inset-bottom));
   background: var(--color-surface);
   border-top: 1px solid var(--color-hairline);
+  /* Motion pass (2026-11-06): the bar rises in with the results (§6.2
+     entrance family — transform + opacity only, once per mount). */
+  animation: rise-in var(--duration-slow) var(--ease-standard);
   box-shadow: var(--shadow-floating);
   animation: notice-in var(--duration-standard) var(--ease-standard);
 }
@@ -1000,7 +1028,21 @@ img {
   margin-inline: auto;
 }
 
-.action-bar__summary {
+.action-bar__actions .btn-secondary {
+  /* Hierarchy pass: the primary download stays the largest action (17px);
+     the three secondaries step down to subhead so the bar reads primary →
+     secondary → tertiary instead of four equal buttons. */
+  font-size: var(--text-subhead);
+}
+
+/* Hierarchy pass: a hairline separates the destructive action from the
+   constructive pair (Add more · Save HD copies | Delete selected). */
+.action-bar__divider {
+  width: 1px;
+  align-self: stretch;
+  margin: var(--space-4) 0;
+  background: var(--color-hairline);
+}
   margin: 0;
   font-size: var(--text-footnote);
   line-height: var(--line-footnote);
@@ -1823,8 +1865,18 @@ img {
 
 .tile__delete {
   min-height: 44px;
+  min-width: 44px; /* R3-4: caption text alone is ~36px wide — keep the coarse 44px box in BOTH axes */
   padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-text-secondary);
+  /* Hierarchy pass: the per-tile Delete is a TERTIARY action — caption
+     size, regular weight (it inherited .btn-text's 17px/600 headline
+     styling and dominated every tile). */
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  font-weight: 400;
 }
 
 /* §11.5.2 detail "Delete": the ONE red control outside the dialog — the
@@ -2030,10 +2082,27 @@ img {
     animation: none !important;
   }
 
+  /* Motion pass (2026-11-06): shared entrance for the app's three surfaces
+     (empty state, pending/results, action bar) — fade + 12px rise, once per
+     mount, transform + opacity only (§6.2 entrance family). */
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   /* §11.5.3: the confirm dialog's entrance collapses too (the dialog must
      never animate under reduced motion — the removal itself is instant
      per §11.5.1). */
-  .confirm__panel {
+  .confirm__panel,
+  .results,
+  .action-bar,
+  .empty-state {
     animation: none !important;
   }
 

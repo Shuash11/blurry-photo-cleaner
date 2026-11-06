@@ -1215,6 +1215,22 @@ class HDPanelView {
     const el = document.createElement("div");
     el.className = "hd-panel";
     this.#el = el;
+    // Bug fix (2026-11-06): the panel is inserted INSIDE the detail panel,
+    // so an Escape keypress bubbled up to the detail's keydown handler and
+    // closed the ENTIRE detail view instead of just the converter. The
+    // panel owns Escape: not busy → close the panel only (stopPropagation
+    // keeps the detail open); busy → swallow Escape (never interrupt a
+    // running conversion, never close the detail either).
+    el.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.#busy) {
+        this.#onClose?.();
+      }
+    });
 
     // Head: title + Cancel text button.
     const head = document.createElement("div");

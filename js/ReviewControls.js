@@ -228,6 +228,14 @@ export class ReviewControls {
     actions.appendChild(del);
     this.#deleteBtn = del;
 
+    // Hierarchy pass (2026-11-06): a hairline separates the destructive
+    // "Delete selected" from the constructive pair, so the bar reads
+    // Add more · Save HD copies | Delete selected | Download selected.
+    const divider = document.createElement("span");
+    divider.className = "action-bar__divider";
+    divider.setAttribute("aria-hidden", "true");
+    actions.insertBefore(divider, del);
+
     const download = document.createElement("button");
     download.type = "button";
     download.className = "btn-primary";
