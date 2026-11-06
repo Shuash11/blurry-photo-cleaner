@@ -21,8 +21,8 @@
  * Selection persists across re-renders (e.g. "Add more" re-analysis).
  */
 
-import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED, MAX_UPSCALE_FACTOR, JPEG_QUALITY, formatPercent, hdOutputSpec, upscaleDimensions } from "./Thresholds.js";
-import { triggerAnchorDownload, triggerAnchorBlobDownload, buildHDSliderRow } from "./ReviewControls.js";
+import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED, MAX_UPSCALE_FACTOR, JPEG_QUALITY, formatPercent, hdOutputSpec, upscaleDimensions, SHARPEN_LEVELS, SHARPEN_DEFAULT, EXPORT_FORMATS, exportName } from "./Thresholds.js";
+import { triggerAnchorDownload, triggerAnchorBlobDownload, buildHDSliderRow, buildChoiceRow, ExportChooser } from "./ReviewControls.js";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -88,6 +88,8 @@ export class ResultsView {
       getConverter: callbacks.getConverter ?? null,
       announce: callbacks.announce ?? null,
       onRequestDelete: (photo, trigger) => this.requestDelete([photo.id], trigger),
+      // v0.3.0: a downloaded HD copy joins the review (auto-reband).
+      onAddHD: callbacks.onAddHDRecord ?? null,
     });
   }
 
@@ -103,6 +105,50 @@ export class ResultsView {
   /** Selected records in store order (App maps these to Files for download). */
   getSelectedPhotos() {
     return this.#photos.filter((photo) => this.#selectedIds.has(photo.id));
+  }
+
+  /**
+   * v0.3.0 (user request: "one tap — store all the sharp good quality
+   * photos and the selected needs-review photos to be downloaded"): the
+   * keepers selection. Every Sharp photo plus the Needs-review photos the
+   * user has ALREADY ticked; a Blurry photo is never selected by this.
+   * One pass over the photos, then one selection-change sync.
+   */
+  selectKeepers() {
+    const keepers = new Set();
+    for (const photo of this.#photos) {
+      if (photo.band === BAND_SHARP) {
+        keepers.add(photo.id);
+      } else if (photo.band === BAND_REVIEW && this.#selectedIds.has(photo.id)) {
+        keepers.add(photo.id);
+      }
+    }
+    this.#selectedIds = keepers;
+    this.#paintSelection();
+    this.#onSelectionChange?.();
+  }
+
+  /** Re-paint every tile's selected state from #selectedIds (selectKeepers
+   *  swaps the whole set, so per-id patching is not enough). */
+  #paintSelection() {
+    for (const tile of this.#resultsEl?.querySelectorAll(".tile") ?? []) {
+      const photoBtn = tile.querySelector(".tile__photo");
+      if (!photoBtn) {
+        continue;
+      }
+      const selected = this.#selectedIds.has(tile.dataset.id);
+      photoBtn.classList.toggle("is-selected", selected);
+      photoBtn.setAttribute("aria-pressed", selected ? "true" : "false");
+    }
+    for (const [band, toggle] of this.#bandToggles) {
+      const bandPhotos = this.#photos.filter((p) => p.band === band);
+      const allSelected = bandPhotos.length > 0 && bandPhotos.every((p) => this.#selectedIds.has(p.id));
+      toggle.textContent = allSelected
+        ? "Deselect"
+        : band === BAND_BLURRY
+          ? `Select all recommended (${bandPhotos.length})`
+          : "Select all";
+    }
   }
 
   /**
@@ -486,6 +532,11 @@ export class ResultsView {
       document.getElementById("start-over-btn") ??
       this.#root.querySelector(".btn-hero");
     target?.focus({ preventScroll: true });
+    // Bug fix (2026-11-06, smoke S7): focus() scrolls minimally — the
+    // focused element can end up flush with the viewport bottom, leaving
+    // the tile's own Delete row behind the fixed action bar. Centering the
+    // focused target keeps the whole tile (meta + delete) clear of the bar.
+    target?.scrollIntoView?.({ block: "center" });
   }
 
   /* ------------------------------------------------------------------
@@ -554,9 +605,11 @@ class PhotoDetailView {
   #stageURL = null;
   #busy = false;
   #touchStart = null;
+  #previewStageURL = null; // v0.3.0: the HD-preview swap on the stage
+  #exportChooser = null; // v0.3.0: the per-photo export format chooser
 
-  constructor({ onToggleSelect, isSelected, getConverter, announce, onRequestDelete }) {
-    this.#callbacks = { onToggleSelect, isSelected, getConverter, announce, onRequestDelete };
+  constructor({ onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD }) {
+    this.#callbacks = { onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD };
   }
 
   get isOpen() {
@@ -676,13 +729,39 @@ class PhotoDetailView {
       onParkFocus: () => this.#doneBtn?.focus({ preventScroll: true }),
       onAnnounce: (text) => this.#callbacks.announce?.(text),
       onClose: () => this.#closeHDPanel(),
+      // v0.3.0: the preview swaps the stage between the original and the
+      // converted result (Download/Discard live in the panel).
+      onPreview: ({ previewURL }) => this.#showPreviewStage(previewURL),
+      // v0.3.0: a downloaded HD copy joins the review (auto-reband).
+      onAddHD: (blob, name) => this.#callbacks.onAddHD?.(blob, name),
     });
     // Inline panel, directly above the bottom bar (§11.3.2).
     this.#panel.insertBefore(this.#hdPanel.el, this.#bottomEl);
     this.#hdPanel.focusSlider();
   }
 
+  /**
+   * v0.3.0 preview: swap the stage image between the original file and the
+   * converted HD preview. previewURL=null restores the original. The
+   * preview URL is OWNED by the HDPanelView (it revokes it on re-preview/
+   * destroy) — this side only ever points an <img> at it.
+   */
+  #showPreviewStage(previewURL) {
+    if (previewURL) {
+      if (!this.#previewStageURL) {
+        this.#previewStageURL = this.#img.src; // remember the original
+      }
+      this.#img.src = previewURL;
+    } else if (this.#previewStageURL) {
+      this.#img.src = this.#previewStageURL;
+      this.#previewStageURL = null;
+    }
+  }
+
   #closeHDPanel() {
+    // v0.3.0: the panel owns the preview URL (destroy revokes it) — the
+    // stage must point back at the original BEFORE it dies.
+    this.#showPreviewStage(null);
     this.#hdPanel?.destroy();
     this.#hdPanel = null;
     this.#restoreDownloadRole();
@@ -1096,27 +1175,60 @@ class PhotoDetailView {
     }
   }
 
+  /**
+   * v0.3.0 (user request): downloading one photo ASKS what format — the
+   * export chooser (Original / PNG / JPEG / WebP). "original" keeps the
+   * v0.1 byte-identical behavior; a re-encode format runs the photo
+   * through the converter at 1× and names it via Thresholds.exportName.
+   */
   #downloadCurrent() {
     if (this.#busy || !this.#photo) {
       return;
     }
+    this.#exportChooser ??= new ExportChooser();
+    this.#exportChooser.open({
+      trigger: this.#downloadBtn,
+      onChoose: (formatId) => this.#runCurrentDownload(formatId),
+    });
+  }
+
+  async #runCurrentDownload(formatId) {
+    if (this.#busy || !this.#photo) {
+      return;
+    }
+    const photo = this.#photo;
     this.#busy = true;
     // #setDisabled keeps focus inside the dialog when the clicked button
     // dies (see the helper's comment).
     this.#setDisabled(this.#downloadBtn, true);
     this.#downloadLabel.textContent = "Preparing…";
     this.#spinner.hidden = false;
-    triggerAnchorDownload(this.#photo.file);
-    // Brief busy state so the button reads as pressed-in-progress (§6.2
-    // permits the spinner on download buttons).
-    setTimeout(() => {
+    try {
+      if (formatId === "original") {
+        triggerAnchorDownload(photo.file);
+        // Brief busy window so the button reads as pressed-in-progress
+        // (§6.2 permits the spinner; the v0.2.1 behavior, kept because an
+        // instant label flip is invisible feedback).
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      } else {
+        const converter = this.#callbacks.getConverter?.();
+        if (!converter) {
+          throw new Error("Converter unavailable");
+        }
+        const result = await converter.convert(photo, 1, { sharpen: 0, format: formatId });
+        triggerAnchorBlobDownload(result.blob, exportName(photo.name, formatId));
+      }
+    } catch {
+      // A re-encode failure surfaces as a plain no-save; the button
+      // recovers below (the §8.2 generic path is disproportionate here).
+    } finally {
       this.#busy = false;
       if (this.#downloadBtn && this.#downloadLabel && this.#spinner) {
         this.#downloadBtn.disabled = false;
         this.#downloadLabel.textContent = "Download this photo";
         this.#spinner.hidden = true;
       }
-    }, 600);
+    }
   }
 }
 
@@ -1140,18 +1252,24 @@ function readStaggerMs() {
    ====================================================================== */
 
 const HD_PANEL_COPY = {
-  heading: "Save an HD copy",
+  heading: "Create an HD copy",
   cancel: "Cancel",
-  apply: "Convert and save",
+  apply: "Create preview",
   applyBusy: "Upscaling…",
   helper: "Pick a larger size to save a copy.",
   honesty: "Upscaled — enlarged, same captured detail.",
-  scope: "Saved as a download. It never re-enters the review — scores and bands stay with your originals.",
+  scope: "Preview first — nothing is saved until you choose Download. A downloaded copy is scored fresh and joins the review next to its original.",
   clampNote: (max) => `This browser supports up to ${max}× for this photo.`,
-  done: (name) => `Saved ${name}.`,
+  previewBadge: "HD preview",
+  showOriginal: "Show original",
+  showPreview: "Show HD preview",
+  downloadPreview: "Download HD copy",
+  discardPreview: "Discard",
+  done: (name) => `Saved ${name}. The HD copy was added to the review with its own score.`,
   failed: "Couldn't upscale this photo. Nothing was changed.",
   retry: "Try again",
-  announceDone: (name, width, height) => `${name} saved — ${width} × ${height}.`,
+  announcePreview: (width, height) => `HD preview ready — ${width} × ${height}. Choose Download or Discard.`,
+  announceDownloaded: (name) => `${name} saved and added to the review.`,
 };
 
 const FACTOR_LABEL = (factor) => `${factor}×`;
@@ -1163,6 +1281,15 @@ class HDPanelView {
   #onParkFocus;
   #onAnnounce;
   #onClose;
+  #onPreview; // v0.3.0: swap the detail stage to the converted result
+  #onAddHD; // v0.3.0: a downloaded HD copy joins the review (auto-reband)
+  #sharpen = SHARPEN_DEFAULT;
+  #format = "jpeg";
+  #formatEl = null;
+  #previewActions = null;
+  #previewURL = null; // object URL of the converted preview (revoked on teardown)
+  #previewBlob = null;
+  #previewName = null;
 
   #el = null;
   #slider = null;
@@ -1180,13 +1307,15 @@ class HDPanelView {
   #busy = false;
   #destroyed = false;
 
-  constructor({ photo, maxFactor, converter, onParkFocus, onAnnounce, onClose }) {
+  constructor({ photo, maxFactor, converter, onParkFocus, onAnnounce, onClose, onPreview, onAddHD }) {
     this.#photo = photo;
     this.#maxFactor = maxFactor;
     this.#converter = converter;
     this.#onParkFocus = onParkFocus ?? null;
     this.#onAnnounce = onAnnounce ?? null;
     this.#onClose = onClose ?? null;
+    this.#onPreview = onPreview ?? null;
+    this.#onAddHD = onAddHD ?? null;
     this.#build();
     // §11.4 initial render: the current target appears WITHOUT animation —
     // motion fires on change, never on entrance.
@@ -1203,6 +1332,11 @@ class HDPanelView {
 
   destroy() {
     this.#destroyed = true;
+    if (this.#previewURL) {
+      URL.revokeObjectURL(this.#previewURL);
+      this.#previewURL = null;
+      this.#previewBlob = null;
+    }
     this.#el?.remove();
     this.#el = null;
   }
@@ -1276,11 +1410,39 @@ class HDPanelView {
     honesty.textContent = HD_PANEL_COPY.honesty;
     el.appendChild(honesty);
 
+    // v0.3.0 (user request): sharpening — the one step that can genuinely
+    // raise edge contrast, so the fresh score can honestly re-band a copy.
+    el.appendChild(buildChoiceRow({
+      label: "Sharpening",
+      name: "hd-sharpen",
+      options: SHARPEN_LEVELS,
+      value: this.#sharpen,
+      onInput: (id) => {
+        this.#sharpen = id;
+      },
+    }));
+
+    // v0.3.0 (user request): export format for the HD copy — PNG / JPEG /
+    // WebP; the extension, mime, and format line all follow the choice.
+    el.appendChild(buildChoiceRow({
+      label: "Format",
+      name: "hd-format",
+      options: EXPORT_FORMATS.filter((f) => f.id !== "original"),
+      value: this.#format,
+      onInput: (id) => {
+        this.#format = id;
+        if (this.#formatEl) {
+          this.#formatEl.textContent = this.#formatLine();
+        }
+      },
+    }));
+
     // Format line: exactly what the download will be named and encoded as.
     const format = document.createElement("p");
     format.className = "hd-copy";
     format.textContent = this.#formatLine();
     el.appendChild(format);
+    this.#formatEl = format;
 
     // Apply: accent-filled primary; disabled at 1× with the helper line
     // (§11.3.2 — a no-op conversion would silently re-encode).
@@ -1314,6 +1476,26 @@ class HDPanelView {
     status.hidden = true;
     el.appendChild(status);
     this.#statusEl = status;
+
+    // v0.3.0 preview action row: after a successful conversion the user
+    // sees the result on the stage and chooses Download or Discard here —
+    // "user can see the result first if it's worth downloadable".
+    const previewActions = document.createElement("div");
+    previewActions.className = "hd-preview__actions";
+    previewActions.hidden = true;
+    const downloadPreview = document.createElement("button");
+    downloadPreview.type = "button";
+    downloadPreview.className = "btn-primary";
+    downloadPreview.textContent = HD_PANEL_COPY.downloadPreview;
+    downloadPreview.addEventListener("click", () => this.#downloadPreview());
+    const discardPreview = document.createElement("button");
+    discardPreview.type = "button";
+    discardPreview.className = "btn-secondary";
+    discardPreview.textContent = HD_PANEL_COPY.discardPreview;
+    discardPreview.addEventListener("click", () => this.#discardPreview());
+    previewActions.append(downloadPreview, discardPreview);
+    el.appendChild(previewActions);
+    this.#previewActions = previewActions;
 
     // Scope caption.
     const scope = document.createElement("p");
@@ -1395,20 +1577,36 @@ class HDPanelView {
     }
     const photo = this.#photo;
     const factor = this.#factor;
+    const sharpenLevel = SHARPEN_LEVELS.find((l) => l.id === this.#sharpen) ?? SHARPEN_LEVELS[0];
     this.#busy = true;
     this.#setControlsDisabled(true);
     this.#applyLabel.textContent = HD_PANEL_COPY.applyBusy;
     this.#applySpinner.hidden = false;
     this.#setStatus(null); // clear the previous done/failed line
+    this.#previewActions.hidden = true;
 
     try {
-      const result = await this.#converter.convert(photo, factor);
-      triggerAnchorBlobDownload(result.blob, result.name);
-      if (!this.#destroyed) {
-        this.#setStatus({ text: HD_PANEL_COPY.done(result.name) });
+      // v0.3.0 preview flow: convert WITHOUT downloading — the result goes
+      // to the stage first ("user can see the result first if it's worth
+      // downloadable"), then the user chooses Download or Discard.
+      const result = await this.#converter.convert(photo, factor, {
+        sharpen: sharpenLevel.amount,
+        format: this.#format,
+      });
+      if (this.#destroyed) {
+        return;
       }
-      // §11.6.4: one polite announcement, once, on download.
-      this.#onAnnounce?.(HD_PANEL_COPY.announceDone(result.name, result.width, result.height));
+      if (this.#previewURL) {
+        URL.revokeObjectURL(this.#previewURL); // a re-preview replaces the old one
+      }
+      this.#previewBlob = result.blob;
+      this.#previewName = result.name;
+      this.#previewURL = URL.createObjectURL(result.blob);
+      this.#onPreview?.({ previewURL: this.#previewURL });
+      this.#previewActions.hidden = false;
+      this.#setStatus({ text: HD_PANEL_COPY.previewBadge });
+      // §11.6.4: one polite announcement, once, on preview ready.
+      this.#onAnnounce?.(HD_PANEL_COPY.announcePreview(result.width, result.height));
     } catch {
       if (!this.#destroyed) {
         this.#setStatus({ text: HD_PANEL_COPY.failed, retry: true });
@@ -1422,6 +1620,34 @@ class HDPanelView {
         this.#applyBtn.disabled = this.#factor === 1;
       }
     }
+  }
+
+  /** v0.3.0: save the previewed copy — and it joins the review with its
+   *  own fresh score (the auto-reband flow lives in App.addHDToReview). */
+  #downloadPreview() {
+    if (!this.#previewBlob || !this.#previewName) {
+      return;
+    }
+    triggerAnchorBlobDownload(this.#previewBlob, this.#previewName);
+    this.#onAddHD?.(this.#previewBlob, this.#previewName);
+    this.#onAnnounce?.(HD_PANEL_COPY.announceDownloaded(this.#previewName));
+    this.#setStatus({ text: HD_PANEL_COPY.done(this.#previewName) });
+    this.#previewActions.hidden = true;
+    // The copy is saved; the preview stays on the stage until the panel
+    // closes (the user may want to compare it once more).
+  }
+
+  /** v0.3.0: throw the preview away — restore the original on the stage. */
+  #discardPreview() {
+    if (this.#previewURL) {
+      URL.revokeObjectURL(this.#previewURL);
+      this.#previewURL = null;
+    }
+    this.#previewBlob = null;
+    this.#previewName = null;
+    this.#onPreview?.({ previewURL: null }); // restore the original stage
+    this.#previewActions.hidden = true;
+    this.#setStatus(null);
   }
 
   #setControlsDisabled(disabled) {

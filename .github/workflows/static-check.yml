@@ -86,7 +86,7 @@ jobs:
             "/docs/assets/screenshot-2-analyzing.png"
             "/docs/assets/screenshot-3-results.png"
             "/docs/assets/screenshot-4-hd-converter.png"
-            "/docs/assets/screenshot-5-delete.png"
+            "/docs/assets/screenshot-5-export-formats.png"
           )
 
           failed=0

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * phase6-e2e-tester.js — INDEPENDENT Phase 6 (polish, responsiveness,
  * accessibility) end-to-end proof for the Blurry Photo Cleaner.
  *
@@ -594,6 +594,8 @@ async function stateM1({ page, context }) {
   const downloads = [];
   page.on("download", (d) => downloads.push(d));
   await page.getByRole("button", { name: "Download selected", exact: true }).tap();
+  // v0.3.0 re-scope: the export chooser opens — pick Original.
+  await page.getByRole("button", { name: /^Original/ }).tap();
 
   // F7 tokens on the secondary "Add more" during the busy window: wait for the
   // disabled state with the settled token values (transition-tolerant).
@@ -845,9 +847,13 @@ async function stateK1({ page }) {
   assert((await summaryText(page)) === "2 selected · 4 total", `summary "${await summaryText(page)}" after 2 keyboard selects`);
   await shot(page, "k1-03-two-selected.png");
 
-  /* Enter on Download selected → downloads */
+  /* Enter on Download selected → the export chooser opens (v0.3.0) — Enter
+     activates the FOCUSED first option, which is "Original" (byte-identical
+     v0.1 behavior) — then the downloads run. */
   const downloads = [];
   page.on("download", (d) => downloads.push(d));
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".confirm__panel", { timeout: STEP_TIMEOUT });
   await page.keyboard.press("Enter");
   const dlDeadline = Date.now() + DOWNLOAD_TIMEOUT;
   while (downloads.length < 2 && Date.now() < dlDeadline) await sleep(50);
@@ -949,6 +955,10 @@ async function stateK2({ page }) {
 
   const downloads = [];
   page.on("download", (d) => downloads.push(d));
+  await page.keyboard.press("Enter");
+  // v0.3.0: the export chooser opens — focus lands on its first option
+  // (Original); Enter activates it (the byte-identical v0.1 download).
+  await page.waitForSelector(".confirm__panel", { timeout: STEP_TIMEOUT });
   await page.keyboard.press("Enter");
   await page.waitForFunction(
     () => {

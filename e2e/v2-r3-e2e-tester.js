@@ -1,4 +1,4 @@
-/**
+﻿/**
  * v2-r3-e2e-tester.js — INDEPENDENT Phase R3 (grey/modern restyle) e2e proof.
  *
  * Written by the E2E/Integration Testing Agent as an independent verification
@@ -657,6 +657,9 @@ async function stateR3_1({ page, context }) {
   page.on("download", (d) => downloads.push(d));
   await installBusyRecorder(page);
   await page.getByRole("button", { name: "Download selected", exact: true }).click({ timeout: STEP_TIMEOUT });
+  // v0.3.0 re-scope: Download selected opens the export chooser (Original /
+  // PNG / JPEG / WebP) � pick Original (the byte-identical v0.1 behavior).
+  await page.getByRole("button", { name: /^Original/ }).click();
   await shot(page, "05-download-busy.png").catch(() => {});
   const twoArrived = await pollUntil(() => Promise.resolve(downloads.length >= 2), DOWNLOAD_TIMEOUT);
   assert(twoArrived, `download: only ${downloads.length} download event(s) arrived within ${DOWNLOAD_TIMEOUT}ms`);
@@ -1241,6 +1244,10 @@ async function stateR3_7({ page }) {
         assert(!disabled, "keyboard: Download selected is disabled although 2 tiles are selected");
         downloadPressed = true;
         expectFocusDropStop = true; // see the R5 adjudication note above
+        await page.keyboard.press("Enter");
+        // v0.3.0: the export chooser opens — focus lands on its first
+        // option (Original); Enter activates it and the downloads run.
+        await page.waitForSelector(".confirm__panel", { timeout: STEP_TIMEOUT });
         await page.keyboard.press("Enter");
         const ok = await pollUntil(() => Promise.resolve(downloads.length >= 2), DOWNLOAD_TIMEOUT);
         assert(ok, `keyboard download: only ${downloads.length} download(s) arrived within ${DOWNLOAD_TIMEOUT}ms`);

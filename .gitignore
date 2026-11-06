@@ -14,3 +14,5 @@ Thumbs.db
 e2e/phase3-e2e.js
 e2e/capture-*.js
 e2e/v2-r5-converter.js
+e2e/capture-*.mjs
+e2e/probe-*.mjs

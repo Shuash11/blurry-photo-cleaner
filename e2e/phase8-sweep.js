@@ -1,4 +1,4 @@
-/**
+﻿/**
  * phase8-sweep.js — Phase 8 full-matrix regression sweep: cross-phase
  * continuity scenario.
  *
@@ -641,6 +641,9 @@ async function runScenario(page) {
   const plural = downloadCount === 1 ? "photo" : "photos";
 
   await page.getByRole("button", { name: "Download selected", exact: true }).click();
+  // v0.3.0 re-scope: Download selected opens the export chooser (Original /
+  // PNG / JPEG / WebP) � pick Original (the byte-identical v0.1 behavior).
+  await page.getByRole("button", { name: /^Original/ }).click();
   await waitLiveRegion(page, `Preparing ${downloadCount} ${plural}`, 5000);
   await expectVisible(page.getByRole("button", { name: /Preparing/ }), "busy download button");
   const addMoreDisabled = await page.getByRole("button", { name: "Add more", exact: true }).isDisabled();

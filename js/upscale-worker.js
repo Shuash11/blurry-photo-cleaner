@@ -5,8 +5,10 @@
  * the transferred (already upright, EXIF-honored) ImageBitmap is drawn onto
  * an OffscreenCanvas at the requested target size with
  * imageSmoothingQuality: "high" — plain canvas resampling that ENLARGES
- * PIXELS AND ADDS NO DETAIL (plan Decision Record) — then encodes the
- * result (JPEG at the job's quality, or PNG) and transfers the bytes back.
+ * PIXELS AND ADDS NO DETAIL (plan Decision Record) — then optionally
+ * applies the unsharp-mask sharpen pass (v0.3.0 — the only step that can
+ * genuinely raise edge contrast, and with it the fresh sharpness score),
+ * then encodes the result (JPEG/PNG/WebP) and transfers the bytes back.
  *
  * Same-origin file worker: constructed from a URL (`new Worker(new
  * URL("./upscale-worker.js", import.meta.url))`), which the shipped CSP
@@ -18,7 +20,7 @@
  *       in this worker; when false the converter must use its main-thread
  *       canvas fallback (plan: "mandatory main-thread canvas fallback").
  *   in  { type: "convert", jobId, photoId, bitmap, targetWidth, targetHeight,
- *         mime, quality }
+ *         mime, quality, sharpen }
  *   out { type: "result", jobId, photoId, … }  — exactly one per convert.
  *       ok:true  carries { width, height, mime, buffer } — buffer is a
  *                transferred ArrayBuffer of the encoded image file.
@@ -29,6 +31,8 @@
  * ends. Nothing is cached between jobs. The result ArrayBuffer is
  * transferred (not copied) on postMessage.
  */
+
+import { applyUnsharp } from "./sharpen.js";
 
 /* Lifecycle flag — set by init, mirroring blur-worker's fail-fast. */
 let initialized = false;
@@ -122,9 +126,17 @@ async function resampleAndEncode(msg) {
   ctx.drawImage(bitmap, 0, 0, msg.targetWidth, msg.targetHeight);
   bitmap.close(); // release the transferred bitmap immediately (memory rule)
 
+  // v0.3.0: the unsharp pass (amount 0 = off). Runs BEFORE encoding so the
+  // saved file carries the sharpened pixels the preview showed.
+  if (msg.sharpen > 0) {
+    const imageData = ctx.getImageData(0, 0, msg.targetWidth, msg.targetHeight);
+    applyUnsharp(imageData, msg.sharpen);
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   const blob = await canvas.convertToBlob({
     type: msg.mime,
-    quality: msg.mime === "image/jpeg" ? msg.quality : undefined,
+    quality: msg.mime === "image/png" ? undefined : msg.quality,
   });
   const buffer = await blob.arrayBuffer();
   return buffer;

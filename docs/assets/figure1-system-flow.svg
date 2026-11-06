@@ -34,7 +34,7 @@
   <line class="flow" x1="228" y1="185" x2="292" y2="185" marker-end="url(#arrow)"/>
 
   <!-- Process box -->
-  <rect class="box" x="300" y="24" width="320" height="322" rx="12"/>
+  <rect class="box" x="300" y="24" width="320" height="360" rx="12"/>
   <text class="box-title" x="320" y="54">Process</text>
   <text class="note" x="320" y="72">per photo, in a background Web Worker</text>
   <line class="sep" x1="320" y1="84" x2="600" y2="84"/>
@@ -62,12 +62,14 @@
   <text class="step-num" x="320" y="310">6</text>
   <text class="step-text" x="340" y="310">Cut into 3 bands</text>
   <text class="note" x="340" y="330">under 40 Blurry &#183; 40&#8211;59 Needs review &#183; 60+ Sharp</text>
+  <text class="note" x="340" y="346">&#183; optional: a worker pool enlarges, sharpens,</text>
+  <text class="note" x="340" y="362">and re-encodes HD copies (PNG/JPEG/WebP, previewed first)</text>
 
   <!-- Process -> Output -->
   <line class="flow" x1="624" y1="185" x2="688" y2="185" marker-end="url(#arrow)"/>
 
   <!-- Output box -->
-  <rect class="box" x="696" y="84" width="200" height="202" rx="12"/>
+  <rect class="box" x="696" y="84" width="200" height="240" rx="12"/>
   <text class="box-title" x="716" y="114">Output</text>
   <line class="sep" x1="716" y1="128" x2="876" y2="128"/>
   <text class="box-strong" x="716" y="154">Grouped review grid</text>
@@ -75,7 +77,8 @@
   <text class="box-line" x="716" y="198">with &ldquo;NN% sharp&rdquo; scores</text>
   <text class="box-line" x="716" y="220">and a Suggested mark on</text>
   <text class="box-line" x="716" y="238">every Blurry photo</text>
-  <text class="note" x="716" y="262">select the recommended ones,</text>
-  <text class="note" x="716" y="278">download originals or HD copies,</text>
-  <text class="note" x="716" y="294">then delete the files on the phone</text>
+  <text class="note" x="716" y="262">one tap selects the keepers;</text>
+  <text class="note" x="716" y="278">downloads ask the format;</text>
+  <text class="note" x="716" y="294">HD copies re-join the review</text>
+  <text class="note" x="716" y="310">at the band they earn</text>
 </svg>

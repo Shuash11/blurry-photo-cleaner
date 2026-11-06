@@ -26,19 +26,27 @@
  * the next job.
  */
 
-import { JPEG_QUALITY, UPSCALE_CANDIDATE_FACTORS, hdOutputSpec, upscaleDimensions } from "./Thresholds.js";
+import { HD_POOL_SIZE, JPEG_QUALITY, UPSCALE_CANDIDATE_FACTORS, hdOutputSpec, upscaleDimensions } from "./Thresholds.js";
 import { decodeImage } from "./PhotoStore.js";
+import { applyUnsharp } from "./sharpen.js";
 
 const WORKER_READY_TIMEOUT_MS = 10000;
 
 export class HDConverter {
-  #worker = null;
+  /* v0.3.0 worker pool (user request: parallel conversion for ≥25-photo
+     batches): HD_POOL_SIZE same-origin workers share the job queue. Each
+     slot is { worker, busy }; #idle is the free-slot stack, #waitQ the FIFO
+     of jobs waiting for a slot. One negotiated convert mode for the pool
+     ("worker" | "main"); the main-thread fallback stays single-lane (it is
+     the degraded path, and it blocks the main thread anyway). */
+  #pool = []; // [{ worker, busy }]
+  #idle = []; // free worker slots (LIFO — warm workers are reused first)
+  #waitQ = []; // { run(slot), reject } — FIFO
   #mode = null; // "worker" | "main" — negotiated at startup; "main" is sticky
   #handshake = null; // { resolve, reject } for the init round-trip
   #pending = new Map(); // jobId → { resolve, reject } for in-flight jobs
   #nextJobId = 1;
   #probeCache = new WeakMap(); // photo record → supported max factor
-  #chain = Promise.resolve(); // conversion jobs run strictly one at a time
 
   /**
    * Supported max factor for a photo, 1–4 in 0.5 steps (§11.3.3). Resolves
@@ -62,98 +70,193 @@ export class HDConverter {
   }
 
   /**
-   * Resample one photo to `factor` × its size and encode it. Resolves with
+   * Resample one photo to `factor` × its size, optionally sharpen, and
+   * encode it as `opts.format` ("png" | "jpeg" | "webp" — undefined keeps
+   * the v0.1 source-derived default). Resolves with
    * { blob, width, height, name, mime } — name/mime from hdOutputSpec so
    * the download and the UI's format line can never disagree. Rejects on
    * a real conversion failure (worker crash, encode error) — the caller
    * renders the §11.3.5 failed state; nothing in the app has changed.
+   *
+   * v0.3.0 pool semantics: callers may fire MANY converts concurrently —
+   * the pool runs HD_POOL_SIZE of them in parallel and the rest wait in
+   * FIFO order. This is what converts a 25-photo batch in waves instead of
+   * one-at-a-time.
    */
-  async convert(photo, factor) {
-    // Sequential discipline (BlurAnalyzer's): a new job waits for the
-    // previous one; a previous failure does not poison the queue.
-    const run = this.#chain.then(() => this.#convertNow(photo, factor), () => this.#convertNow(photo, factor));
-    this.#chain = run.catch(() => { /* keep the chain settled for the next job */ });
-    return run;
+  convert(photo, factor, opts = {}) {
+    const sharpen = typeof opts.sharpen === "number" && opts.sharpen > 0 ? opts.sharpen : 0;
+    const format = typeof opts.format === "string" ? opts.format : undefined;
+    return this.#acquireSlot(
+      (slot) => this.#convertNow(photo, factor, sharpen, format, slot),
+    );
   }
 
-  /** Terminate the worker and fail anything in flight ("Start over"). */
+  /**
+   * Take a free pool slot (or queue until one frees) and run the job. The
+   * convert mode is negotiated HERE, before any slot math — a first call
+   * negotiates, grows the pool to one worker, and runs immediately;
+   * subsequent concurrent calls grow the pool up to HD_POOL_SIZE (the
+   * ≥25-photo batch then converts in ⌈25/size⌉ parallel waves) and only
+   * queue when every slot is busy.
+   */
+  async #acquireSlot(run) {
+    try {
+      await this.#ensureMode();
+    } catch {
+      this.#mode = "main"; // cannot even probe → the mandatory fallback
+    }
+    if (this.#mode === "main") {
+      // Main-thread fallback: single lane by necessity (it blocks the UI).
+      const run0 = this.#mainChain.then(run, run);
+      this.#mainChain = run0.catch(() => { /* keep the chain settled */ });
+      return run0;
+    }
+    const slot = this.#idle.pop();
+    if (slot) {
+      return run(slot);
+    }
+    if (this.#pool.length < HD_POOL_SIZE) {
+      const fresh = await this.#growPool();
+      if (fresh) {
+        return run(fresh);
+      }
+    }
+    return new Promise((resolve, reject) => {
+      this.#waitQ.push({ run, resolve, reject });
+    });
+  }
+
+  #mainChain = Promise.resolve(); // fallback single lane
+
+  /** Release a slot back to the pool and hand it the next waiting job. */
+  #releaseSlot(slot) {
+    if (!slot) {
+      return; // main-thread-fallback jobs run without a pool slot
+    }
+    const next = this.#waitQ.shift();
+    if (next) {
+      next.run(slot).then(next.resolve, next.reject);
+    } else {
+      this.#idle.push(slot);
+    }
+  }
+
+  /** Terminate every worker and fail anything in flight ("Start over"). */
   dispose() {
     this.#teardown(new Error("HDConverter disposed"));
   }
 
   /* ------------------------------------------------------------------
-     Worker lifecycle (mirror of BlurAnalyzer's)
-     ------------------------------------------------------------------ */
+      Worker lifecycle (pool edition)
+      ------------------------------------------------------------------ */
 
-  /** Create the worker once per session and negotiate the convert mode. */
-  async #ensureWorker() {
-    if (this.#mode === "main" || this.#worker) {
-      return;
+  /** Negotiate the convert mode once — ALL concurrent callers share this
+   *  exact promise (the v0.3.0 race: two simultaneous first converts each
+   *  created a probe worker and overwrote the single #handshake field, so
+   *  one caller's await never resolved and its job hung forever). */
+  #modePromise = null;
+
+  async #ensureMode() {
+    if (this.#mode) {
+      return this.#mode;
     }
+    if (!this.#modePromise) {
+      this.#modePromise = this.#negotiateMode();
+    }
+    return this.#modePromise;
+  }
 
-    const worker = new Worker(new URL("./upscale-worker.js", import.meta.url), {
+  async #negotiateMode() {
+    const probe = new Worker(new URL("./upscale-worker.js", import.meta.url), {
       type: "module",
-      name: "upscale-worker",
+      name: "upscale-worker-probe",
     });
-    this.#worker = worker;
-
     const ready = new Promise((resolve, reject) => {
       this.#handshake = { resolve, reject };
     });
-    // Startup watchdog. If the handshake already settled this is a no-op.
     setTimeout(() => this.#handshake?.reject(new Error("Upscale worker did not start")), WORKER_READY_TIMEOUT_MS);
-
-    worker.addEventListener("message", (event) => this.#handleMessage(event.data));
-    worker.addEventListener("error", (event) => this.#handleWorkerError(event));
-    worker.postMessage({ type: "init" });
-
+    probe.addEventListener("message", (event) => this.#handleHandshake(event.data));
+    probe.addEventListener("error", (event) => this.#handshake?.reject(new Error(event.message || "worker error")));
+    probe.postMessage({ type: "init" });
     try {
       const canvasInWorker = await ready;
       if (canvasInWorker) {
-        this.#mode = "worker"; // resampling + encoding run off the main thread
-      } else {
-        // No OffscreenCanvas in this worker: it can never help — park the
-        // session in the main-thread fallback (plan-mandated path).
-        worker.terminate();
-        this.#worker = null;
-        this.#mode = "main";
+        this.#mode = "worker";
+        // The probe worker becomes pool slot 0; the rest are created on
+        // demand as the queue depth requires (no idle fan-out cost).
+        this.#pool.push({ worker: probe, busy: false });
+        // Slot 0 needs the full result handler — the handshake listener
+        // above only handles "ready".
+        probe.addEventListener("message", (event) => this.#handleMessage(this.#pool[0], event.data));
+        this.#idle.push(this.#pool[0]);
+        return "worker";
       }
+      probe.terminate();
+      this.#mode = "main";
+      return "main";
     } catch (error) {
-      this.#teardown(error); // so the NEXT job rebuilds instead of reusing a dead worker
-      throw error;
+      probe.terminate();
+      this.#mode = "main"; // cannot start → the plan's mandatory fallback
+      return "main";
     }
   }
 
-  #handleMessage(msg) {
+  /** Grow the pool by one warm worker (capped at HD_POOL_SIZE). */
+  async #growPool() {
+    if (this.#pool.length >= HD_POOL_SIZE) {
+      return null;
+    }
+    const worker = new Worker(new URL("./upscale-worker.js", import.meta.url), {
+      type: "module",
+      name: `upscale-worker-${this.#pool.length}`,
+    });
+    const slot = { worker, busy: true };
+    this.#pool.push(slot);
+    worker.addEventListener("message", (event) => this.#handleMessage(slot, event.data));
+    worker.addEventListener("error", () => {
+      // Crash → fail this slot's in-flight job; the slot dies. The next
+      // convert grows a fresh worker (crash → rebuild, pool edition).
+      this.#pending.forEach((job, jobId) => {
+        if (job.slot === slot) {
+          this.#pending.delete(jobId);
+          job.reject(new Error("Upscale worker crashed"));
+        }
+      });
+      this.#pool = this.#pool.filter((s) => s !== slot);
+      this.#idle = this.#idle.filter((s) => s !== slot);
+    });
+    worker.postMessage({ type: "init" });
+    return slot;
+  }
+
+  #handleHandshake(msg) {
     if (msg?.type === "ready") {
       this.#handshake?.resolve(Boolean(msg.canvas));
       this.#handshake = null;
-      return;
     }
+  }
+
+  #handleMessage(slot, msg) {
     if (msg?.type === "result") {
+      slot.busy = false;
       const job = this.#pending.get(msg.jobId);
       if (job) {
         this.#pending.delete(msg.jobId);
         job.resolve(msg);
       }
+      this.#releaseSlot(slot); // hand the warm slot to the next waiting job
     }
-  }
-
-  /**
-   * Script error inside the worker: fail the handshake and every in-flight
-   * job with the same error, then drop the worker so the next convert
-   * rebuilds a fresh one (crash → rebuild). The current convert rejects →
-   * the caller shows the §11.3.5 failed state.
-   */
-  #handleWorkerError(event) {
-    this.#teardown(new Error(`Upscale worker crashed: ${event.message || "unknown error"}`));
   }
 
   #teardown(error) {
     this.#handshake?.reject(error);
     this.#handshake = null;
-    this.#worker?.terminate();
-    this.#worker = null;
+    for (const slot of this.#pool) {
+      slot.worker.terminate();
+    }
+    this.#pool = [];
+    this.#idle = [];
+    this.#waitQ = [];
     this.#mode = null;
     const pending = [...this.#pending.values()];
     this.#pending.clear();
@@ -163,55 +266,51 @@ export class HDConverter {
   }
 
   /* ------------------------------------------------------------------
-     Conversion
-     ------------------------------------------------------------------ */
+      Conversion
+      ------------------------------------------------------------------ */
 
-  async #convertNow(photo, factor) {
-    const output = hdOutputSpec(photo.name);
+  async #convertNow(photo, factor, sharpen, format, slot) {
+    const output = hdOutputSpec(photo.name, format);
     // One rounding rule (§11.3.2): the target the worker draws, the dims
     // announced to the live region, and the readout all come from here.
     const target = upscaleDimensions(photo.width, photo.height, factor);
 
-    // Worker start failures are an AVAILABILITY question — the main-thread
-    // fallback answers them (the plan's mandatory fallback). Job failures
+    // The mode was negotiated by #acquireSlot before this ran; job failures
     // after startup propagate as real conversion failures.
-    let useWorker = false;
-    try {
-      await this.#ensureWorker();
-      useWorker = this.#mode === "worker";
-    } catch {
-      useWorker = false;
-    }
+    const useWorker = this.#mode === "worker";
 
     if (useWorker) {
       const decoded = await decodeImage(photo.file);
       if (decoded.source instanceof ImageBitmap) {
         try {
-          return await this.#convertViaWorker(photo.id, decoded.source, target, output);
+          return await this.#convertViaWorker(slot, photo.id, decoded.source, target, output, sharpen);
         } catch (error) {
-          if (this.#worker === null) {
+          this.#releaseSlot(slot);
+          if (this.#pool.length === 0) {
             // The worker crashed mid-job: retry once on the fallback so a
-            // transient worker death degrades to slower-but-working rather
-            // than a spurious failure (crash → rebuild already ran).
-            return this.#convertOnMainThread(photo.file, target, output);
+            // transient worker death degrades to slower-but-working.
+            return this.#convertOnMainThread(photo.file, target, output, sharpen);
           }
           throw error;
         }
       }
       decoded.release(); // SVG-class source: not transferable — fall through to the main path
-      return this.#convertOnMainThread(photo.file, target, output);
+      this.#releaseSlot(slot);
+      return this.#convertOnMainThread(photo.file, target, output, sharpen);
     }
-    return this.#convertOnMainThread(photo.file, target, output);
+    this.#releaseSlot(slot);
+    return this.#convertOnMainThread(photo.file, target, output, sharpen);
   }
 
-  /** Transfer the bitmap; the worker draws, encodes, and transfers bytes back. */
-  #convertViaWorker(photoId, bitmap, target, output) {
+  /** Transfer the bitmap; the pool worker draws, sharpens, encodes. */
+  #convertViaWorker(slot, photoId, bitmap, target, output, sharpen) {
     const jobId = `h${this.#nextJobId}`;
     this.#nextJobId += 1;
+    slot.busy = true;
     return new Promise((resolve, reject) => {
-      this.#pending.set(jobId, { resolve, reject });
+      this.#pending.set(jobId, { resolve, reject, slot });
       try {
-        this.#worker.postMessage(
+        slot.worker.postMessage(
           {
             type: "convert",
             jobId,
@@ -221,11 +320,13 @@ export class HDConverter {
             targetHeight: target.height,
             mime: output.mime,
             quality: JPEG_QUALITY,
+            sharpen,
           },
           [bitmap],
         );
       } catch (error) {
         this.#pending.delete(jobId);
+        slot.busy = false;
         reject(new Error(`Could not send "${photoId}" to the upscale worker`, { cause: error }));
       }
     }).then((msg) => {
@@ -244,11 +345,9 @@ export class HDConverter {
 
   /**
    * Mandatory main-thread fallback (plan Decision Record): identical
-   * drawImage-with-high-smoothing resample and encode on a detached
-   * canvas. Used when the worker lacks OffscreenCanvas, cannot start, or
-   * the decoded source is not a transferable bitmap.
+   * resample + sharpen + encode on a detached canvas.
    */
-  async #convertOnMainThread(file, target, output) {
+  async #convertOnMainThread(file, target, output, sharpen) {
     const decoded = await decodeImage(file);
     try {
       const canvas = document.createElement("canvas");
@@ -261,7 +360,13 @@ export class HDConverter {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(decoded.source, 0, 0, target.width, target.height);
-      const blob = await canvasToBlob(canvas, output.mime, output.mime === "image/jpeg" ? JPEG_QUALITY : undefined);
+      if (sharpen > 0) {
+        const imageData = ctx.getImageData(0, 0, target.width, target.height);
+        applyUnsharp(imageData, sharpen);
+        ctx.putImageData(imageData, 0, 0);
+      }
+      const quality = output.mime === "image/png" ? undefined : JPEG_QUALITY;
+      const blob = await canvasToBlob(canvas, output.mime, quality);
       return { blob, width: target.width, height: target.height, name: output.name, mime: output.mime };
     } finally {
       decoded.release();

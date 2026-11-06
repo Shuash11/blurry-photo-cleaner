@@ -33,6 +33,7 @@ import {
   BAND_SHARP,
   MAX_BATCH_FILES,
   MAX_FILE_BYTES,
+  formatPercent,
 } from "./Thresholds.js";
 
 const DECODE_CONCURRENCY = 4; // keeps big folder picks responsive without memory spikes
@@ -93,6 +94,9 @@ export class App {
         announce: (text) => this.#view.announce(text),
         // §11.5.4: the dialog confirmed — App performs the removal.
         onDeletePhotos: (ids) => this.#deletePhotos(ids),
+        // v0.3.0 (user request): a downloaded HD copy is scored fresh and
+        // enters the review next to its original — the auto-reband flow.
+        onAddHDRecord: (blob, name) => this.#addHDRecord(blob, name),
       },
     });
     this.#reviewControls = new ReviewControls({
@@ -101,6 +105,9 @@ export class App {
       getSelectedPhotos: () => this.#resultsView.getSelectedPhotos(),
       getConverter: () => this.#hdConverter,
       onAddMore: () => this.#view.openFilePicker(),
+      // v0.3.0 (user request): one tap selects the keepers — every Sharp
+      // photo plus the Needs-review photos the user already ticked.
+      onSelectKeepers: () => this.#resultsView.selectKeepers(),
       // §11.5.2: the action-bar trigger forwards to the shared dialog via
       // ResultsView (the single delete gate).
       onDeleteSelected: (trigger) =>
@@ -432,6 +439,72 @@ export class App {
   }
 
   /**
+   * v0.3.0 auto-reband (user request: "if the image was improved due to the
+   * converter then it should automatically go to what level of sharpness it
+   * belongs"): a DOWNLOADED HD copy enters the review as its own record —
+   * decoded, thumbnailed, scored fresh by the analyzer, and banded exactly
+   * where the sharpened pixels actually land. It appears NEXT TO its
+   * original (both stay; the user decides which to keep). The copy is
+   * queued on the same serialization pipeline as every other store change,
+   * so it can never race a clear() or a running batch.
+   */
+  addHDToReview(blob, name) {
+    this.#queue = this.#queue
+      .then(() => this.#addHDRecord(blob, name))
+      .catch(() => {
+        // A copy that fails to decode (it decoded at preview time, so this
+        // is near-impossible) surfaces in the generic §8.2 notice.
+        this.#view.showError({
+          body: "The HD copy couldn't be added to the review. The download itself was not affected.",
+        });
+      });
+  }
+
+  async #addHDRecord(blob, name) {
+    if (this.#mode !== "results") {
+      return;
+    }
+    const file = new File([blob], name, { type: blob.type });
+    const record = await this.#store.createRecord(file);
+    // Score ONLY the new copy — directly through the analyzer, WITHOUT the
+    // §9b progress-card path: the detail view is open on the original and a
+    // full pipeline re-render would fight its DOM (the insertBefore race).
+    // Scoring is best-effort: a failure leaves the copy unscored ("—"),
+    // never a fake 0.
+    try {
+      await this.#analyzer.analyzeAll([record], {
+        onResult: (photo, result) => {
+          this.#store.applyAnalysis(photo.id, { score: result.score, band: result.band });
+        },
+        onSkipped: (photo, message) => {
+          this.#store.applySkip(photo.id, message);
+        },
+      });
+    } catch {
+      /* the copy stays unscored — rendered as "—" (§11.2) */
+    }
+    this.#enterResults({ animate: false });
+    const fresh = this.#store.getById(record.id);
+    const band = fresh?.band ?? "review";
+    const score = typeof fresh?.score === "number" ? fresh.score : null;
+    this.#view.announce(
+      `HD copy added to the review: ${formatPercent(score ?? 0)}, ${band}.`,
+    );
+  }
+
+  /**
+   * v0.3.0 (user request: "one tap — all the sharp good quality photos and
+   * the selected needs-review photos"): the keepers selection. Every Sharp
+   * photo plus the Needs-review photos the user has already ticked; never
+   * a Blurry one. Selection state lives in ResultsView.
+   */
+  selectKeepers() {
+    if (this.#mode === "results") {
+      this.#resultsView.selectKeepers();
+    }
+  }
+
+  /**
    * §11.5.4 confirmed session delete (the dialog is the only gate): remove
    * the records — the store revokes their thumbnail URLs — then re-render
    * the results in place (§11.5.1: removal is instant, no exit animation,
@@ -461,6 +534,13 @@ export class App {
       this.#updateStartOver();
     } else {
       this.#enterResults({ animate: false });
+      // Bug fix (2026-11-06, smoke S7): deletions shrink the grid while the
+      // browser keeps the old scroll position — the last remaining tiles
+      // then sit BEHIND the fixed action bar and their Delete controls are
+      // untappable (Playwright: "action-bar intercepts pointer events").
+      // The re-rendered grid starts at the top, where the focus fallback
+      // expects it.
+      window.scrollTo(0, 0);
       // §10: pending ledgers re-surface above the re-rendered results
       // (the notice host re-mounts empty on every render).
       if (this.#skippedNames.length > 0 && !this.#noticeDismissed) {

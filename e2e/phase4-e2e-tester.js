@@ -1,4 +1,4 @@
-/**
+﻿/**
  * phase4-e2e-tester.js — INDEPENDENT Phase 4 (Results/review/export UI) e2e proof.
  *
  * Written by the E2E/Integration Testing Agent as an independent verification
@@ -904,6 +904,9 @@ async function stateP5({ page }) {
   page.on("download", (d) => downloads.push({ name: d.suggestedFilename(), download: d, at: Date.now() }));
 
   await downloadBtn().click();
+  // v0.3.0 re-scope: Download selected opens the export chooser — pick
+  // Original (the byte-identical v0.1 behavior), then the busy state runs.
+  await page.getByRole("button", { name: /^Original/ }).click();
 
   // Busy state: label "Preparing…", disabled, spinner, Add more disabled, live region.
   await page.waitForFunction(
@@ -1080,6 +1083,9 @@ async function stateP6({ page }) {
   page.on("download", (d) => perItemDownloads.push(d));
   const dlPromise = page.waitForEvent("download", { timeout: STEP_TIMEOUT });
   await panel().getByRole("button", { name: /^(Download this photo|Preparing)/ }).click();
+  // v0.3.0: the export chooser opens — pick Original (byte-identical).
+  await page.waitForSelector(".confirm__panel", { timeout: STEP_TIMEOUT });
+  await page.getByRole("button", { name: /^Original/ }).click();
   await page.waitForFunction(
     () => {
       const btn = document.querySelector(".detail__download");

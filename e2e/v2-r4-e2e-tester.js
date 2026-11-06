@@ -790,6 +790,8 @@ async function runState(id, title, fn) {
       const downloads = [];
       page.on("download", (d) => downloads.push(d));
       await page.getByRole("button", { name: /^Download selected/ }).click();
+      // v0.3.0 re-scope: the export chooser opens — pick Original.
+      await page.getByRole("button", { name: /^Original/ }).click();
       const dlDeadline = Date.now() + DOWNLOAD_TIMEOUT;
       while (downloads.length < 2 && Date.now() < dlDeadline) {
         await new Promise((r) => setTimeout(r, 50));

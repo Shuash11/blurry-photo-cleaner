@@ -16,7 +16,7 @@
  * count (App pushes updates) and asks the provider for the selected files.
  */
 
-import { MAX_UPSCALE_FACTOR } from "./Thresholds.js";
+import { EXPORT_FORMATS, EXPORT_FORMAT_DEFAULT, MAX_UPSCALE_FACTOR, SHARPEN_LEVELS, SHARPEN_DEFAULT, exportName, hdOutputSpec } from "./Thresholds.js";
 
 const DOWNLOAD_SPACING_MS = 350; // sequential clicks; probe-downloads.js confirmed every download fires at this spacing
 const URL_REVOKE_DELAY_MS = 10000; // anchor downloads start within ms; revoke after use (memory rule), never leak
@@ -74,6 +74,9 @@ export class ReviewControls {
   #hdBtn = null;         // "Save HD copies" (§11.3.4 batch converter entry)
   #hdDialog = null;
   #deleteBtn = null;     // "Delete selected" (§11.5.2 — opens the dialog)
+  #keepersBtn = null;    // "Select keepers" (v0.3.0 — Sharp + ticked Needs review)
+  #chooser = null;       // v0.3.0: the ExportChooser (Original/PNG/JPEG/WebP)
+  #resizeObserver = null; // v0.3.0: keeps --action-bar-h synced to the real bar height
   #downloadBtn = null;
   #downloadLabel = null;
   #spinner = null;
@@ -86,15 +89,17 @@ export class ReviewControls {
   #getSelectedPhotos;
   #getConverter;
   #onAddMore;
+  #onSelectKeepers; // v0.3.0: the keepers preset (Sharp + ticked Needs review)
   #onDeleteSelected;
   #announce;
   #externalLockChange; // App-provided: tiles go inert while a batch conversion runs (§11.3.4)
 
-  constructor({ getSelectedFiles, getSelectedPhotos, getConverter, onAddMore, onDeleteSelected, announce, onLockChange }) {
+  constructor({ getSelectedFiles, getSelectedPhotos, getConverter, onAddMore, onSelectKeepers, onDeleteSelected, announce, onLockChange }) {
     this.#getSelectedFiles = getSelectedFiles;
     this.#getSelectedPhotos = getSelectedPhotos;
     this.#getConverter = getConverter;
     this.#onAddMore = onAddMore;
+    this.#onSelectKeepers = onSelectKeepers ?? null;
     this.#onDeleteSelected = onDeleteSelected ?? null;
     this.#announce = announce;
     this.#externalLockChange = onLockChange ?? null;
@@ -108,6 +113,17 @@ export class ReviewControls {
     this.#bar = this.#buildBar();
     this.#host = host;
     host.appendChild(this.#bar);
+    // Bug fix (2026-11-06, smoke S7): the bar's height varies with wrapping
+    // (six controls at 375px wrap to ~250px) — the results grid's clearance
+    // must track the REAL bar height or the last tiles end up behind it and
+    // their controls are untappable. The observer writes the live height to
+    // --action-bar-h; .results consumes it for its bottom padding.
+    this.#resizeObserver = new ResizeObserver(() => {
+      const h = Math.ceil(this.#bar.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--action-bar-h", `${h}px`);
+    });
+    this.#resizeObserver.observe(this.#bar);
+    this.#resizeObserver.observe(document.documentElement);
     this.#refresh();
   }
 
@@ -116,6 +132,7 @@ export class ReviewControls {
     this.#bar = null;
     this.#summaryEl = null;
     this.#addMoreBtn = null;
+    this.#keepersBtn = null;
     this.#hdBtn = null;
     this.#deleteBtn = null;
     this.#downloadBtn = null;
@@ -124,6 +141,11 @@ export class ReviewControls {
     this.#busy = false;
     this.#hdDialog?.close();
     this.#hdDialog = null;
+    if (this.#resizeObserver) {
+      this.#resizeObserver.disconnect();
+      this.#resizeObserver = null;
+    }
+    document.documentElement.style.removeProperty("--action-bar-h");
     // F8: drop any pending selection announcement and forget the sync — a
     // fresh results session ("Add more", start-over) is silent until the
     // user drives a count change.
@@ -202,6 +224,21 @@ export class ReviewControls {
     actions.appendChild(addMore);
     this.#addMoreBtn = addMore;
 
+    // v0.3.0 (user request): ONE tap selects the keepers — every Sharp
+    // photo plus the Needs-review photos the user already ticked. Selection
+    // state lives in ResultsView; this is just the affordance.
+    const keepers = document.createElement("button");
+    keepers.type = "button";
+    keepers.className = "btn-secondary";
+    keepers.textContent = "Select keepers";
+    keepers.addEventListener("click", () => {
+      if (!this.#busy) {
+        this.#onSelectKeepers?.();
+      }
+    });
+    actions.appendChild(keepers);
+    this.#keepersBtn = keepers;
+
     // §11.3.4: third secondary, DOM order Add more · Save HD copies ·
     // Download selected; disabled at 0 selected (zero-selected precedent).
     const hd = document.createElement("button");
@@ -252,6 +289,8 @@ export class ReviewControls {
     this.#downloadBtn = download;
     this.#downloadLabel = label;
     this.#spinner = spinner;
+    // v0.3.0: the export chooser (Original / PNG / JPEG / WebP).
+    this.#chooser = new ExportChooser();
 
     row.appendChild(actions);
     bar.appendChild(row);
@@ -287,22 +326,36 @@ export class ReviewControls {
     if (this.#deleteBtn) {
       this.#deleteBtn.disabled = this.#busy || this.#selected === 0;
     }
+    if (this.#keepersBtn) {
+      this.#keepersBtn.disabled = this.#busy;
+    }
   }
 
   /**
-   * Sequential anchor downloads of the selected files' original File
-   * objects (route A). Zero-selected is blocked: the button is disabled
-   * (§8.1) and this guard is defense in depth.
+   * v0.3.0: the export chooser names the format — "original" keeps the v0.1
+   * byte-identical behavior; a re-encode format runs every selected photo
+   * through the converter POOL at 1× (same pixels, chosen codec — parallel,
+   * named via Thresholds.exportName). Zero-selected is blocked by the
+   * disabled button; this guard is defense in depth.
    */
-  async #downloadSelected() {
+  #downloadSelected() {
     if (this.#busy) {
       return;
     }
-    const files = this.#getSelectedFiles?.() ?? [];
-    if (files.length === 0) {
+    const photos = this.#getSelectedPhotos?.() ?? [];
+    if (photos.length === 0) {
       return;
     }
+    this.#chooser.open({
+      trigger: this.#downloadBtn,
+      onChoose: (formatId) => this.#runDownloads(photos, formatId),
+    });
+  }
 
+  async #runDownloads(photos, formatId) {
+    if (this.#busy || photos.length === 0) {
+      return;
+    }
     this.#busy = true;
     this.#refresh();
     if (this.#downloadBtn && this.#downloadLabel && this.#spinner) {
@@ -310,23 +363,42 @@ export class ReviewControls {
       this.#spinner.hidden = false;
     }
     // §12: download status through the polite live region.
-    this.#announce?.(
-      `Preparing ${files.length} ${files.length === 1 ? "photo" : "photos"}`,
-    );
+    const n = photos.length;
+    this.#announce?.(`Preparing ${n} ${n === 1 ? "photo" : "photos"}`);
 
-    for (const file of files) {
-      triggerAnchorDownload(file);
-      await sleep(DOWNLOAD_SPACING_MS);
+    try {
+      if (formatId === "original") {
+        for (const photo of photos) {
+          triggerAnchorDownload(photo.file);
+          await sleep(DOWNLOAD_SPACING_MS);
+        }
+      } else {
+        // Re-encode through the pool (parallel): 1× = same pixel size, the
+        // chosen codec. Each file downloads as its conversion finishes.
+        const convert = this.#getConverter?.();
+        if (!convert) {
+          throw new Error("Converter unavailable");
+        }
+        const jobs = photos.map((photo) =>
+          convert
+            .convert(photo, 1, { sharpen: 0, format: formatId })
+            .then((result) => {
+              triggerAnchorBlobDownload(result.blob, exportName(photo.name, formatId));
+            })
+            .catch(() => { /* one failed photo never blocks the rest */ }),
+        );
+        await Promise.all(jobs);
+      }
+    } finally {
+      this.#busy = false;
+      if (this.#downloadBtn && this.#downloadLabel && this.#spinner) {
+        this.#downloadLabel.textContent = "Download selected";
+        this.#spinner.hidden = true;
+      }
+      this.#refresh();
     }
-
-    this.#busy = false;
-    if (this.#downloadBtn && this.#downloadLabel && this.#spinner) {
-      this.#downloadLabel.textContent = "Download selected";
-      this.#spinner.hidden = true;
-    }
-    this.#refresh();
     this.#announce?.(
-      `Saved ${files.length} ${files.length === 1 ? "photo" : "photos"}`,
+      `Saved ${n} ${n === 1 ? "photo" : "photos"}`,
     );
   }
 
@@ -374,10 +446,171 @@ export class ReviewControls {
    original sizes; one merged pair would be false (§11.8 note 4).
    ====================================================================== */
 
+/* ── v0.3.0 — shared choice row + export chooser (user requests) ─────────── */
+
+/**
+ * The segmented choice row shared by the HD panel (sharpening, format) and
+ * the batch dialog (the same two controls): label + one radio-style group.
+ * Native radios (keyboard-complete, no custom ARIA) styled as a segmented
+ * control. options: [{ id, label }].
+ */
+export function buildChoiceRow({ label, name, options, value, onInput }) {
+  const row = document.createElement("div");
+  row.className = "choice-row";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "choice-row__label";
+  labelEl.textContent = label;
+  row.appendChild(labelEl);
+
+  const group = document.createElement("div");
+  group.className = "choice-row__group";
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", label);
+  for (const option of options) {
+    const id = `${name}-${option.id}`;
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.className = "choice-row__input";
+    radio.name = name;
+    radio.id = id;
+    radio.value = option.id;
+    radio.checked = option.id === value;
+    radio.addEventListener("change", () => {
+      if (radio.checked) {
+        onInput?.(option.id);
+      }
+    });
+    const pill = document.createElement("label");
+    pill.className = "choice-row__pill";
+    pill.setAttribute("for", id);
+    pill.textContent = option.label;
+    group.append(radio, pill);
+  }
+  row.appendChild(group);
+  return row;
+}
+
+/**
+ * ExportChooser — the v0.3.0 format picker (user request: "when downloading
+ * one photo it asks what format to export"). A compact sheet: Original
+ * (byte-identical) / PNG / JPEG / WebP; remembers the last pick for the
+ * session (module state, never localStorage — the storage rule). Reuses the
+ * confirm-dialog surface (.confirm/.confirm__panel) with option buttons.
+ */
+let lastExportFormat = EXPORT_FORMAT_DEFAULT;
+
+export class ExportChooser {
+  #root = null;
+  #trigger = null;
+
+  open({ trigger = null, onChoose }) {
+    this.close();
+    this.#trigger = trigger ?? null;
+
+    const root = document.createElement("div");
+    root.className = "confirm";
+    root.addEventListener("click", (event) => {
+      if (event.target === root) {
+        this.close(); // scrim click = cancel
+      }
+    });
+
+    const panel = document.createElement("section");
+    panel.className = "confirm__panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    panel.setAttribute("aria-labelledby", "export-title");
+    panel.tabIndex = -1;
+    panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.close();
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const focusables = [...panel.querySelectorAll("button:not([disabled])")];
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = panel.getRootNode().activeElement;
+      if (!focusables.includes(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+    this.#root = root;
+
+    const title = document.createElement("h2");
+    title.id = "export-title";
+    title.className = "confirm__title";
+    title.textContent = "Choose a download format";
+    panel.appendChild(title);
+
+    const note = document.createElement("p");
+    note.className = "confirm__text";
+    note.textContent = "Original saves the file exactly as it is. The other formats re-encode it at the same pixel size.";
+    panel.appendChild(note);
+
+    let firstBtn = null;
+    for (const format of EXPORT_FORMATS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-secondary export-choice";
+      const label = document.createElement("span");
+      label.className = "export-choice__label";
+      label.textContent = format.label;
+      btn.appendChild(label);
+      if (format.id === lastExportFormat) {
+        const current = document.createElement("span");
+        current.className = "export-choice__hint";
+        current.textContent = "last used";
+        btn.appendChild(current);
+      }
+      btn.addEventListener("click", () => {
+        lastExportFormat = format.id;
+        const choose = onChoose;
+        // Focus RETURNS to the invoking button (the trigger survives every
+        // chooser use — the destructive dialog is the only flow that skips
+        // the restore). This keeps the keyboard flow coherent: the busy
+        // state then parks focus on Done from a real in-panel focus.
+        this.close();
+        choose?.(format.id);
+      });
+      panel.appendChild(btn);
+      firstBtn ??= btn;
+    }
+
+    root.appendChild(panel);
+    document.body.appendChild(root);
+    firstBtn?.focus();
+  }
+
+  close({ restoreFocus = true } = {}) {
+    if (!this.#root) {
+      return;
+    }
+    this.#root.remove();
+    this.#root = null;
+    if (restoreFocus && this.#trigger && document.contains(this.#trigger)) {
+      this.#trigger.focus({ preventScroll: true });
+    }
+    this.#trigger = null;
+  }
+}
+
 const HD_COPY = {
   heading: "Save HD copies",
   honesty: "Upscaled — enlarged, same captured detail.",
-  scope: "Saved as a download. It never re-enters the review — scores and bands stay with your originals.",
+  scope: "Preview first — nothing is saved until you choose Download. A downloaded copy is scored fresh and joins the review next to its original.",
   clampNote: "Photos above this browser's canvas limit save at their largest supported size.",
   helper: "Pick a larger size to save a copy.",
   apply: "Convert and save",
@@ -404,6 +637,8 @@ class BatchHDDialog {
   #announce = null;
   #onLockChange = null;
   #factor = 1;
+  #sharpen = SHARPEN_DEFAULT;
+  #format = "jpeg";
   #state = "idle"; // "idle" | "processing" | "done" | "failed"
   #slider = null;
   #summaryLine = null;
@@ -419,6 +654,8 @@ class BatchHDDialog {
     this.#announce = announce ?? null;
     this.#onLockChange = onLockChange ?? null;
     this.#factor = 1;
+    this.#sharpen = SHARPEN_DEFAULT;
+    this.#format = "jpeg";
     this.#state = "idle";
 
     this.#root = document.createElement("div");
@@ -499,6 +736,27 @@ class BatchHDDialog {
       register: (el) => { this.#slider = el; },
     }));
 
+    // v0.3.0 (user requests): sharpening + export format for the whole
+    // batch — the same choice controls as the per-photo panel.
+    body.appendChild(buildChoiceRow({
+      label: "Sharpening",
+      name: "hd-batch-sharpen",
+      options: SHARPEN_LEVELS,
+      value: this.#sharpen,
+      onInput: (id) => {
+        this.#sharpen = id;
+      },
+    }));
+    body.appendChild(buildChoiceRow({
+      label: "Format",
+      name: "hd-batch-format",
+      options: EXPORT_FORMATS.filter((f) => f.id !== "original"),
+      value: this.#format,
+      onInput: (id) => {
+        this.#format = id;
+      },
+    }));
+
     const honesty = document.createElement("p");
     honesty.className = "hd-copy";
     honesty.textContent = HD_COPY.honesty;
@@ -555,13 +813,27 @@ class BatchHDDialog {
   }
 
   #renderDone(savedCount, clampedCount) {
+    this.#renderDonePanel(HD_COPY.done(savedCount), clampedCount, null);
+  }
+
+  /** v0.3.0 pool edition: per-photo failures no longer abort the batch —
+   *  the done panel reports saved vs failed honestly. */
+  #renderPartialDone(savedCount, failedCount, clampedCount) {
+    this.#renderDonePanel(
+      `Saved ${savedCount} of ${savedCount + failedCount} HD copies.`,
+      clampedCount,
+      failedCount > 0 ? `${failedCount} ${failedCount === 1 ? "photo" : "photos"} couldn't be upscaled.` : null,
+    );
+  }
+
+  #renderDonePanel(message, clampedCount, failureNote) {
     const body = this.#body;
     body.replaceChildren();
 
-    const message = document.createElement("p");
-    message.className = "hd-dialog__lede";
-    message.textContent = HD_COPY.done(savedCount);
-    body.appendChild(message);
+    const done = document.createElement("p");
+    done.className = "hd-dialog__lede";
+    done.textContent = message;
+    body.appendChild(done);
 
     if (clampedCount > 0) {
       const clamped = document.createElement("p");
@@ -570,50 +842,21 @@ class BatchHDDialog {
       body.appendChild(clamped);
     }
 
-    const done = document.createElement("button");
-    done.type = "button";
-    done.className = "btn-primary hd-dialog__apply";
-    done.textContent = "Done";
-    done.addEventListener("click", () => this.close());
-    body.appendChild(done);
+    if (failureNote) {
+      const failed = document.createElement("p");
+      failed.className = "hd-copy";
+      failed.textContent = failureNote;
+      body.appendChild(failed);
+    }
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn-primary hd-dialog__apply";
+    button.textContent = "Done";
+    button.addEventListener("click", () => this.close());
+    body.appendChild(button);
     // §11.6.2: Done state → the "Done" button.
-    done.focus();
-  }
-
-  #renderFailed(savedCount, total) {
-    const body = this.#body;
-    body.replaceChildren();
-
-    const message = document.createElement("p");
-    message.className = "hd-dialog__lede";
-    message.textContent = savedCount > 0 ? HD_COPY.partial(savedCount, total) : HD_COPY.failedAll;
-    body.appendChild(message);
-
-    const actions = document.createElement("div");
-    actions.className = "hd-dialog__actions";
-
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "btn-secondary";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => this.close());
-    actions.appendChild(cancel);
-
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.className = "btn-primary";
-    retry.textContent = "Try again";
-    retry.addEventListener("click", () => {
-      // Re-queue only the unsaved (§11.3.4); already-saved files stay saved
-      // and #remaining was cut down to them when the run failed.
-      this.#state = "idle";
-      this.#run();
-    });
-    actions.appendChild(retry);
-    body.appendChild(actions);
-
-    // The least destructive action takes focus on a failed state (APG).
-    cancel.focus();
+    button.focus();
   }
 
   /* ------------------------------------------------------------------
@@ -627,52 +870,83 @@ class BatchHDDialog {
     const photos = this.#remaining;
     const total = photos.length;
     const factor = this.#factor;
+    const sharpenLevel = SHARPEN_LEVELS.find((l) => l.id === this.#sharpen) ?? SHARPEN_LEVELS[0];
     this.#state = "processing";
     this.#panel.focus({ preventScroll: true }); // controls swap away; park focus on the panel
     this.#announce?.(HD_COPY.announceStart(total));
 
     let saved = 0;
+    let failed = 0;
     let clamped = 0;
-    try {
-      for (let i = 0; i < photos.length; i += 1) {
-        const photo = photos[i];
-        // 1-based current item in the label ("Upscaling 3 of 12" — §11.3.4),
-        // bar fill carries the completed fraction (analysis pattern).
-        this.#renderProcessing(Math.min(saved + 1, total), total, photo.name);
-        // §11.3.3: the probe runs per photo at convert time; a photo that
-        // cannot reach the chosen factor saves at its own supported max —
-        // never silently (the done state discloses the count).
-        const supported = await this.#converter.probeMax(photo);
-        const effective = Math.min(factor, supported);
-        if (effective < factor) {
-          clamped += 1;
+    // v0.3.0 (user request: parallel conversion, ≥25 in a batch): ALL jobs
+    // are handed to the converter POOL at once — HD_POOL_SIZE workers pull
+    // from it in parallel, the UI thread stays free, and the progress bar
+    // counts completions (the v0.2 loop was strictly one-at-a-time).
+    //
+    // Downloads are the ONE serialized step: the browser throttles/drops
+    // anchor clicks that fire simultaneously (25 parallel clicks delivered
+    // ~10 events). Completed conversions queue their downloads on this
+    // chain and leave DOWNLOAD_SPACING_MS apart — parallel decode, paced
+    // saves (the v0.2.1 probe-downloads evidence).
+    let downloadChain = Promise.resolve();
+    const queueDownload = (blob, name) => {
+      downloadChain = downloadChain.then(async () => {
+        triggerAnchorBlobDownload(blob, name);
+        await sleep(DOWNLOAD_SPACING_MS);
+      });
+    };
+    this.#renderProcessing(1, total, photos[0]?.name ?? "");
+    const jobs = photos.map((photo, index) =>
+      (async () => {
+        // v0.3.0 batch optimization (the 25-photo budget): convert
+        // OPTIMISTICALLY at the chosen factor — the machinery already
+        // fails cleanly when the browser cannot allocate the canvas — and
+        // run the §11.3.3 capability probe ONLY after such a failure, then
+        // retry at the probed max. This removes 25 serialized main-thread
+        // probes from the happy path (they were the 120s bottleneck).
+        let result;
+        try {
+          result = await this.#converter.convert(photo, factor, {
+            sharpen: sharpenLevel.amount,
+            format: this.#format,
+          });
+        } catch {
+          const supported = await this.#converter.probeMax(photo);
+          const effective = Math.min(factor, supported);
+          if (effective < factor) {
+            clamped += 1;
+          }
+          result = await this.#converter.convert(photo, effective, {
+            sharpen: sharpenLevel.amount,
+            format: this.#format,
+          });
         }
-        const result = await this.#converter.convert(photo, effective);
-        triggerAnchorBlobDownload(result.blob, result.name);
+        queueDownload(result.blob, result.name);
         saved += 1;
-        // Sequential spacing between consecutive anchor clicks — the
-        // DOWNLOAD_SPACING_MS evidence (:17, probe-downloads.js): a batch of
-        // fast-converting photos must not fire downloads closer together
-        // than the browser reliably honors. The last download needs no
-        // trailing wait — the done state may show immediately.
-        if (i < photos.length - 1) {
-          await sleep(DOWNLOAD_SPACING_MS);
-        }
-      }
-    } catch {
-      // §11.3.4 failure partway: stop, report what saved, offer Try again
-      // over the unsaved remainder (already-saved files stay saved).
-      this.#remaining = photos.slice(saved);
-      this.#state = "failed";
-      this.#renderFailed(saved, total);
-      this.#announce?.(HD_COPY.announcePartial(saved, total));
-      return;
-    }
+      })()
+        .then(() => {
+          // 1-based completed count in the label; the fill carries the
+          // completed fraction (analysis pattern).
+          this.#renderProcessing(Math.min(saved + 1, total), total, `Completed ${saved} of ${total}`);
+        })
+        .catch(() => {
+          failed += 1;
+        }),
+    );
+    await Promise.all(jobs);
+    await downloadChain; // every queued anchor click has fired (paced)
 
     this.#remaining = [];
     this.#state = "done";
-    this.#renderDone(saved, clamped);
-    this.#announce?.(HD_COPY.announceDone(saved));
+    if (failed > 0) {
+      // v0.3.0: with the pool, per-photo failures no longer abort the batch
+      // — the done state discloses exactly what happened.
+      this.#renderPartialDone(saved, failed, clamped);
+      this.#announce?.(HD_COPY.announcePartial(saved, total));
+    } else {
+      this.#renderDone(saved, clamped);
+      this.#announce?.(HD_COPY.announceDone(saved));
+    }
   }
 
   /* ------------------------------------------------------------------

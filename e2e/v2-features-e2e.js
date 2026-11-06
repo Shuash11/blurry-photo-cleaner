@@ -104,9 +104,13 @@ try {
     await page.keyboard.press("ArrowRight"); // 1.5× → 2×
     await page.waitForTimeout(300);
 
+        // v0.3.0 preview flow: "Create preview" converts without downloading;
+    // the download fires from the preview's "Download HD copy" button.
+    await page.getByRole("button", { name: "Create preview" }).click();
+    await page.waitForSelector(".hd-preview__actions:not([hidden])", { timeout: 15000 });
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 15000 }),
-      page.getByRole("button", { name: "Convert and save" }).click(),
+      page.getByRole("button", { name: "Download HD copy" }).click(),
     ]);
     const name = download.suggestedFilename();
     const path = await download.path();
@@ -119,7 +123,10 @@ try {
       dims.w === srcDims.w * 2 && dims.h === srcDims.h * 2, JSON.stringify(dims));
 
     const after = await page.evaluate(() => window.__debugState().photos.map((p) => ({ s: p.score, b: p.band })));
-    check("R5 store untouched by conversion", JSON.stringify(before) === JSON.stringify(after),
+    // v0.3.0: the DOWNLOAD adds the HD copy as a new record (the auto-reband
+    // behavior) — the ORIGINAL record must stay byte-identical.
+    check("R5 original record untouched by conversion",
+      JSON.stringify(before[0]) === JSON.stringify(after[0]) && after.length === before.length + 1,
       JSON.stringify({ before, after }));
     check("R5 zero console errors in per-photo flow", issues.length === 0, issues.join(" | "));
     await page.close();
@@ -173,10 +180,10 @@ try {
     check("R5 batch: HD naming on both", downloads.every((d) => /-hd\./.test(d.suggestedFilename())),
       downloads.map((d) => d.suggestedFilename()).join(", "));
     // §11.3.5 done state (the honesty paragraph belongs to idle — asserted
-    // above); read the completion message before closing.
-    const dialogText = await page.locator(".hd-dialog__panel").textContent();
+    // above). WAIT for the done state first, then read it.
     await page.waitForSelector("text=2 HD copies saved.", { timeout: 10000 }).catch(() => {});
-    check("R5 batch: done state message", dialogText.includes("2 HD copies saved"));
+    const dialogText = await page.locator(".hd-dialog__panel").textContent();
+    check("R5 batch: done state message", dialogText.includes("2 HD copies saved"), dialogText.slice(0, 120));
     await page.keyboard.press("Escape"); // done state closes
 
     // §11.3.5 prohibited-word sweep across the whole document (post-flows).

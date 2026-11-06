@@ -125,10 +125,12 @@ function check(name, pass, detail) {
     // Select the first tile and download it; compare name and bytes to source.
     const firstTileName = (await page.locator(".results .tile").first().locator(".tile__filename").textContent()).trim();
     await page.locator(".results .tile__photo").first().click();
-    const [download] = await Promise.all([
-      page.waitForEvent("download", { timeout: 15000 }),
-      page.locator(".action-bar .btn-primary").click(),
-    ]);
+    const dlPromise = page.waitForEvent("download", { timeout: 15000 });
+    await page.locator(".action-bar .btn-primary").click();
+    // v0.3.0 re-scope: the export chooser opens — pick Original (the
+    // byte-identical download the byte-comparison below expects).
+    await page.getByRole("button", { name: /^Original/ }).click();
+    const download = await dlPromise;
     const suggested = download.suggestedFilename();
     const dlPath = path.join(os.tmpdir(), `phase5-dl-${Date.now()}-${suggested}`);
     await download.saveAs(dlPath);

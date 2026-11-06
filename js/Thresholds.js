@@ -205,15 +205,78 @@ export function upscaleDimensions(width, height, factor) {
    stripping). PNG sources keep their extension → "{basename}-hd.png".
    Everything else saves JPEG at JPEG_QUALITY. One helper so the panel's
    format line, the actual encode format, and the download's filename can
-   never disagree. */
-export function hdOutputSpec(filename) {
+   never disagree.
+
+   v0.3.0: an explicit `format` ("png" | "jpeg" | "webp") overrides the
+   source-derived default — the export-format chooser (user request
+   2026-11-06) names the encode format, so the extension, the mime, and the
+   panel's format line must all follow it. No format → the legacy behavior. */
+const FORMAT_SPECS = {
+  png: { ext: "png", mime: "image/png" },
+  jpeg: { ext: "jpg", mime: "image/jpeg" },
+  webp: { ext: "webp", mime: "image/webp" },
+};
+
+export function hdOutputSpec(filename, format) {
   const dot = filename.lastIndexOf(".");
   const base = dot > 0 ? filename.slice(0, dot) : filename;
+  if (format && FORMAT_SPECS[format]) {
+    const spec = FORMAT_SPECS[format];
+    return { name: `${base}-hd.${spec.ext}`, mime: spec.mime };
+  }
   const isPng = /\.png$/i.test(filename);
   return {
     name: `${base}-hd.${isPng ? "png" : "jpg"}`,
     mime: isPng ? "image/png" : "image/jpeg",
   };
+}
+
+/* ── v0.3.0 — export formats, sharpening, worker pool (user requests) ────── */
+
+/** Export formats for the download chooser: "Original" keeps the source
+ *  bytes byte-identical (the v0.1 behavior); the other three re-encode
+ *  through the converter at 1× (PNG lossless, JPEG/WebP at JPEG_QUALITY).
+ *  One list so the chooser, the encoder, and the extension logic agree. */
+export const EXPORT_FORMATS = [
+  { id: "original", label: "Original", mime: null },
+  { id: "png", label: "PNG", mime: "image/png" },
+  { id: "jpeg", label: "JPEG", mime: "image/jpeg" },
+  { id: "webp", label: "WebP", mime: "image/webp" },
+];
+
+/** The default export choice (the chooser remembers the last pick for the
+ *  session — module state, never localStorage, per the storage rule). */
+export const EXPORT_FORMAT_DEFAULT = "original";
+
+/** Unsharp-mask sharpening levels for the HD converter (user request
+ *  2026-11-06): plain resampling only ENLARGES; the sharpen pass is what
+ *  can genuinely raise local edge contrast — and with it the sharpness
+ *  score — so a converted copy can honestly re-band. Amounts are the
+ *  Laplacian-add weight (out = v + amount·(4v − neighbors)); 1px radius. */
+export const SHARPEN_LEVELS = [
+  { id: "off", label: "Off", amount: 0 },
+  { id: "low", label: "Low", amount: 0.3 },
+  { id: "high", label: "High", amount: 0.6 },
+];
+
+export const SHARPEN_DEFAULT = "off";
+
+/** Parallel HD conversion pool (user request: "at least 25" in one batch):
+ *  the pool runs this many workers pulling from the job queue — sized to
+ *  the CPU (cores − 1, 2–8), which converts 25 photos in ~⌈25/size⌉ waves
+ *  while the UI thread stays free. */
+export const HD_POOL_SIZE = Math.max(
+  2,
+  Math.min(8, (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4) - 1,
+);
+
+/** Name for a re-encoded ORIGINAL export (no "-hd" — that marks HD upscales):
+ *  "{basename}.{format ext}". Same extension rule as hdOutputSpec. */
+export function exportName(filename, format) {
+  const dot = filename.lastIndexOf(".");
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const spec = FORMAT_SPECS[format];
+  return `${base}.${spec ? spec.ext : "jpg"}`;
 }
 
 /* ── Percentage display (plan v2 R4, design-spec-v2 §11.2) ───────────────── */
