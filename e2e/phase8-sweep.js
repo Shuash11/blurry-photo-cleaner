@@ -599,21 +599,25 @@ async function runScenario(page) {
   const blurryCount = blurryNames.length;
   assert(blurryCount >= 2, `blurry band has ${blurryCount} photo(s) — need at least 2 for select-all + deselect`);
 
-  await blurryBand.getByRole("button", { name: "Select all", exact: true }).click();
+  // R6 re-scope (2026-11-06, design-spec-v2 §11.5.5): the Blurry band's
+  // toggle reads "Select all recommended ({N})"; Blurry tiles' accessible
+  // names end with ", suggested for deletion".
+  const photoName = (name) =>
+    new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(, suggested for deletion)?$`);
+  await blurryBand.getByRole("button", { name: /Select all recommended \(\d+\)/ }).click();
   await expectText(page, `${blurryCount} selected · ${validCount} total`, "summary after band select-all");
   for (const name of blurryNames) {
-    const pressed = await page.getByRole("button", { name, exact: true }).getAttribute("aria-pressed");
+    const pressed = await page.getByRole("button", { name: photoName(name) }).getAttribute("aria-pressed");
     assert(pressed === "true", `tile ${name} aria-pressed=${pressed} after Select all`);
   }
 
   await page.getByRole("button", { name: "fixture-sharp-text.png", exact: true }).click();
   await expectText(page, `${blurryCount + 1} selected · ${validCount} total`, "summary after +1 sharp");
 
-  await page.getByRole("button", { name: "fixture-blurred-checkerboard.png", exact: true }).click();
+  const blurredBtn = page.getByRole("button", { name: photoName("fixture-blurred-checkerboard.png") });
+  await blurredBtn.click();
   await expectText(page, `${blurryCount} selected · ${validCount} total`, "summary after deselect");
-  const deselectPressed = await page
-    .getByRole("button", { name: "fixture-blurred-checkerboard.png", exact: true })
-    .getAttribute("aria-pressed");
+  const deselectPressed = await blurredBtn.getAttribute("aria-pressed");
   assert(deselectPressed === "false", `deselected tile still pressed (${deselectPressed})`);
 
   const expectedNames = [

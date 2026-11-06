@@ -29,7 +29,8 @@ function boot() {
     fileInput,
     callbacks: {
       onFilesChosen: (items) => app.handleFilesChosen(items),
-      // kind is "undecodable" or "analysis-skip" — App clears that ledger.
+      // kind is "undecodable", "analysis-skip", "oversize", or "over-count" —
+      // App clears that ledger.
       onNoticeDismissed: (kind) => app.handleNoticeDismissed(kind),
     },
   });

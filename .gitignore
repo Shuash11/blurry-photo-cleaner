@@ -10,3 +10,7 @@ e2e/phase2-verify.js
 e2e/phase2-ux-review.js
 Thumbs.db
 .DS_Store
+
+e2e/phase3-e2e.js
+e2e/capture-*.js
+e2e/v2-r5-converter.js

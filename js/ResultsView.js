@@ -21,8 +21,9 @@
  * Selection persists across re-renders (e.g. "Add more" re-analysis).
  */
 
-import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED } from "./Thresholds.js";
-import { triggerAnchorDownload } from "./ReviewControls.js";
+import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED, MAX_UPSCALE_FACTOR, JPEG_QUALITY, formatPercent, hdOutputSpec, upscaleDimensions } from "./Thresholds.js";
+import { triggerAnchorDownload, triggerAnchorBlobDownload, buildHDSliderRow } from "./ReviewControls.js";
+import { DeleteConfirmDialog } from "./DeleteConfirmDialog.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -47,6 +48,23 @@ const STAGGER_FALLBACK_MS = 50; // == --duration-stagger
 const SWIPE_AXIS_MIN_PX = 48;    // minimum travel for a swipe to count
 const SWIPE_DOWN_CLOSE_PX = 80;  // downward travel that closes the sheet
 
+/** §11.5 file-size caption (detail view): compact byte formatting, the same
+ *  "141 KB" style the v1 tiles used. Module-private — Thresholds owns the
+ *  score/percent formats; bytes are a view concern. */
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return "";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${Math.round(kb)} KB`;
+  }
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
 export class ResultsView {
   #root;
   #resultsEl = null;
@@ -54,15 +72,22 @@ export class ResultsView {
   #bandToggles = new Map(); // band id → "Select all" button element
   #photos = [];
   #selectedIds = new Set();
+  #selectionLocked = false; // §11.3.4: true while a batch HD conversion runs
   #detail;
   #onSelectionChange;
+  #onDeletePhotos;
+  #deleteDialog = null; // §11.5.3: ONE confirmation dialog for every trigger
 
   constructor({ root, callbacks = {} }) {
     this.#root = root;
     this.#onSelectionChange = callbacks.onSelectionChange ?? null;
+    this.#onDeletePhotos = callbacks.onDeletePhotos ?? null;
     this.#detail = new PhotoDetailView({
       onToggleSelect: (photoId) => this.#toggleSelection(photoId),
       isSelected: (photoId) => this.#selectedIds.has(photoId),
+      getConverter: callbacks.getConverter ?? null,
+      announce: callbacks.announce ?? null,
+      onRequestDelete: (photo, trigger) => this.requestDelete([photo.id], trigger),
     });
   }
 
@@ -80,6 +105,16 @@ export class ResultsView {
     return this.#photos.filter((photo) => this.#selectedIds.has(photo.id));
   }
 
+  /**
+   * §11.3.4: while a batch HD conversion runs, the selection is locked —
+   * tiles are inert to selection toggles until done, so the downloads that
+   * stream during progress always match the selection the user confirmed.
+   * App flips this through ReviewControls' lock callback.
+   */
+  setSelectionLocked(locked) {
+    this.#selectionLocked = locked;
+  }
+
   /* ------------------------------------------------------------------
      Rendering
      ------------------------------------------------------------------ */
@@ -91,6 +126,11 @@ export class ResultsView {
    */
   render(photos, { animate = false } = {}) {
     this.#photos = photos.slice();
+    // §11.5.4: re-renders rebuild every band section — stale toggle
+    // elements from the previous render (e.g. a band that just emptied
+    // after a deletion) must not survive in the map, or the focus
+    // fallback chain would try to focus a detached node.
+    this.#bandToggles.clear();
     const liveIds = new Set(this.#photos.map((photo) => photo.id));
     for (const id of [...this.#selectedIds]) {
       if (!liveIds.has(id)) {
@@ -106,6 +146,15 @@ export class ResultsView {
     noticeSlot.className = "results__notices";
     results.appendChild(noticeSlot);
     this.#noticeSlot = noticeSlot;
+
+    // §11.2: the one-instance explanatory subtitle — a single line for the
+    // whole screen, directly above the first band header (below the §9e
+    // notice slot), never per tile or per band. Plain text in flow: no live
+    // region (it does not change), no dismiss control.
+    const subtitle = document.createElement("p");
+    subtitle.className = "results__subtitle";
+    subtitle.textContent = "Percentages are based on detected sharpness.";
+    results.appendChild(subtitle);
 
     // §6.2: the stagger comes from the --duration-stagger token, read once
     // per render pass and threaded down to the delay math (custom
@@ -212,7 +261,15 @@ export class ResultsView {
     photoBtn.type = "button";
     photoBtn.className = "tile__photo";
     photoBtn.setAttribute("aria-pressed", this.#selectedIds.has(photo.id) ? "true" : "false");
-    photoBtn.setAttribute("aria-label", photo.name);
+    // §11.5.5: the recommendation fact is carried by the accessible name
+    // directly — the "Suggested" badge itself is aria-hidden decoration
+    // (meaning by text, never color alone).
+    photoBtn.setAttribute(
+      "aria-label",
+      photo.band === BAND_BLURRY
+        ? `${photo.name}, suggested for deletion`
+        : photo.name,
+    );
     const img = document.createElement("img");
     img.src = photo.thumbURL;
     img.alt = ""; // the filename below is the accessible name
@@ -220,6 +277,17 @@ export class ResultsView {
     img.height = photo.height;
     img.loading = "lazy";
     photoBtn.appendChild(img);
+    // §11.5.5 per-tile badge: every Blurry tile is recommended for
+    // deletion. Top-LEFT pill (the selection checkmark owns the top-right,
+    // so the two never collide); text-only, aria-hidden — the tile
+    // button's accessible name carries the fact (above).
+    if (photo.band === BAND_BLURRY) {
+      const suggested = document.createElement("span");
+      suggested.className = "tile__suggested";
+      suggested.setAttribute("aria-hidden", "true");
+      suggested.textContent = "Suggested";
+      photoBtn.appendChild(suggested);
+    }
     const check = document.createElement("span");
     check.className = "tile__check";
     check.setAttribute("aria-hidden", "true");
@@ -242,20 +310,39 @@ export class ResultsView {
 
     const metaRow = document.createElement("span");
     metaRow.className = "tile__meta-row";
+    // §11.2 layout consequence: the percentage chip is ≈3× wider than the
+    // bare score, so the file-size caption yields its tile slot (it moves
+    // to the detail view per §11.2/§11.5). Tile meta stays two lines:
+    // filename, then the percentage chip — uniform across every tile.
     metaRow.appendChild(this.#buildChip(photo));
-    const size = document.createElement("span");
-    size.className = "tile__size";
-    size.textContent = formatBytes(photo.size);
-    metaRow.appendChild(size);
     metaBtn.appendChild(metaRow);
 
     metaBtn.addEventListener("click", () => this.#openDetail(photo, metaBtn));
     tile.appendChild(metaBtn);
 
+    // §11.5.2 third meta row: per-tile "Delete" — a NEUTRAL text button
+    // (red on 500 tiles would scream; the danger lives in the dialog).
+    // Opens the confirmation dialog; it never deletes directly.
+    const deleteRow = document.createElement("div");
+    deleteRow.className = "tile__delete-row";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn-text tile__delete";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.setAttribute("aria-label", `Delete ${photo.name} from this session`);
+    deleteBtn.addEventListener("click", () => this.requestDelete([photo.id], deleteBtn));
+    deleteRow.appendChild(deleteBtn);
+    tile.appendChild(deleteRow);
+
     return tile;
   }
 
-  /** §8.1 score chip: 8px band-color dot + tabular number in band color. */
+  /**
+   * §8.1 score chip with the §11.2 percentage format: 8px band-color dot +
+   * "NN% sharp" in band color (tabular-nums so grids of chips align).
+   * Skipped/pending keeps the muted dot + "—" — never "0% sharp": a skip
+   * has no score (§11.2), while a genuine score of 0 renders "0% sharp".
+   */
   #buildChip(photo) {
     const chip = document.createElement("span");
     chip.className = "chip";
@@ -265,7 +352,7 @@ export class ResultsView {
     num.className = "chip__num";
     if (typeof photo.score === "number" && photo.band && photo.band !== BAND_SKIPPED) {
       chip.classList.add(`chip--${photo.band}`);
-      num.textContent = String(photo.score);
+      num.textContent = formatPercent(photo.score);
     } else {
       chip.classList.add("chip--pending");
       num.textContent = "—";
@@ -287,6 +374,9 @@ export class ResultsView {
   }
 
   #applySelection(photoId, selected) {
+    if (this.#selectionLocked) {
+      return; // §11.3.4: tiles are inert to selection toggles during a batch conversion
+    }
     if (selected) {
       this.#selectedIds.add(photoId);
     } else {
@@ -316,7 +406,86 @@ export class ResultsView {
     if (!toggle) {
       return;
     }
-    toggle.textContent = this.#bandAllSelected(band) ? "Deselect" : "Select all";
+    if (this.#bandAllSelected(band)) {
+      toggle.textContent = "Deselect";
+      return;
+    }
+    // §11.5.5: the Blurry band IS the recommended-for-deletion set — its
+    // one-tap select action teaches what the band means. {N} is the band's
+    // current photo count (recomputes with the bands); other bands keep
+    // the plain label.
+    if (band === BAND_BLURRY) {
+      const count = this.#photos.filter((p) => p.band === BAND_BLURRY).length;
+      toggle.textContent = `Select all recommended (${count})`;
+      return;
+    }
+    toggle.textContent = "Select all";
+  }
+
+  /* ------------------------------------------------------------------
+      §11.5 session delete — dialog + confirmed removal
+      ------------------------------------------------------------------ */
+
+  /**
+   * Open the §11.5.3 confirmation dialog for the given photo ids. Every
+   * delete affordance funnels through here (tile row, detail view, batch
+   * "Delete selected") — there is no path that removes a photo without an
+   * explicit confirm press (§11.5.1).
+   */
+  requestDelete(ids, trigger = null) {
+    const photos = ids
+      .map((id) => this.#photos.find((p) => p.id === id))
+      .filter(Boolean);
+    if (photos.length === 0) {
+      return;
+    }
+    this.#deleteDialog ??= new DeleteConfirmDialog();
+    this.#deleteDialog.open({
+      photos,
+      trigger,
+      onConfirm: () => this.#executeDelete(photos),
+    });
+  }
+
+  /** Action-bar entry point ("Delete selected"): the current selection. */
+  requestDeleteSelected(trigger = null) {
+    this.requestDelete(
+      this.getSelectedPhotos().map((photo) => photo.id),
+      trigger,
+    );
+  }
+
+  /**
+   * §11.5.4 confirmed deletion: close the detail view if it is showing a
+   * deleted photo (§11.5.3 rule 6 — both close), hand the removal to App
+   * (store.remove + re-render + notices + sync + announcement), then apply
+   * the focus fallback chain (§11.5.4): the next remaining tile's meta
+   * button in the same band → that band's header toggle → the header
+   * "Start over" button. The invoker is usually gone by now (APG: "focus
+   * is set on another element that provides logical work flow").
+   */
+  #executeDelete(photos) {
+    const bandOfFirst = photos[0]?.band ?? null;
+    const ids = new Set(photos.map((photo) => photo.id));
+    this.#detail.closeIfPhoto(ids);
+    this.#onDeletePhotos?.(ids);
+    this.#applyPostDeleteFocus(bandOfFirst);
+  }
+
+  #applyPostDeleteFocus(band) {
+    if (!band) {
+      document.getElementById("start-over-btn")?.focus({ preventScroll: true });
+      return;
+    }
+    const nextMeta = this.#resultsEl?.querySelector(
+      `.band--${CSS.escape(band)} .tile__meta-btn`,
+    );
+    const target =
+      nextMeta ??
+      this.#bandToggles.get(band) ??
+      document.getElementById("start-over-btn") ??
+      this.#root.querySelector(".btn-hero");
+    target?.focus({ preventScroll: true });
   }
 
   /* ------------------------------------------------------------------
@@ -359,6 +528,7 @@ class PhotoDetailView {
   #root = null;
   #panel = null;
   #filenameEl = null;
+  #sizeEl = null; // §11.5: the file-size caption lives in the detail view
   #selectBtn = null;
   #selectLabel = null;
   #prevBtn = null;
@@ -372,7 +542,12 @@ class PhotoDetailView {
   #downloadBtn = null;
   #downloadLabel = null;
   #spinner = null;
+  #deleteBtn = null; // §11.5.2 detail "Delete" (destructive red on the stage)
   #doneBtn = null; // focus parking spot when a focused control self-disables
+  #bottomEl = null;
+  #saveHdBtn = null; // "Save HD copy" — renders only when the probe finds a factor above 1× (§11.3.2)
+  #hdPanel = null; // the inline converter panel (HDPanelView) while open
+  #probeSeq = 0; // guards async probe results against navigation/close races
   #group = [];
   #photo = null;
   #trigger = null;
@@ -380,8 +555,8 @@ class PhotoDetailView {
   #busy = false;
   #touchStart = null;
 
-  constructor({ onToggleSelect, isSelected }) {
-    this.#callbacks = { onToggleSelect, isSelected };
+  constructor({ onToggleSelect, isSelected, getConverter, announce, onRequestDelete }) {
+    this.#callbacks = { onToggleSelect, isSelected, getConverter, announce, onRequestDelete };
   }
 
   get isOpen() {
@@ -400,15 +575,30 @@ class PhotoDetailView {
     this.#refreshSelect();
     this.#refreshNav();
     this.#panel.focus({ preventScroll: true });
+    // §11.3.3: the capability probe runs when the detail view OPENS (not
+    // when the converter opens) so the "Save HD copy" entry's presence and
+    // the Unavailable state are decidable before any converter exists.
+    this.#probeHD(photo);
   }
 
-  close() {
+  /**
+   * Close the overlay. restoreFocus=false skips the §12 focus return —
+   * used by the confirmed deletion path (§11.5.4), where the invoking tile
+   * is about to leave the DOM and the §11.5.4 fallback chain owns focus.
+   */
+  close({ restoreFocus = true } = {}) {
     if (!this.#root) {
       return;
     }
+    this.#probeSeq += 1; // orphan any in-flight probe
+    this.#hdPanel?.destroy();
+    this.#hdPanel = null;
+    this.#saveHdBtn = null;
+    this.#deleteBtn = null;
     this.#root.remove();
     this.#root = null;
     this.#panel = null;
+    this.#bottomEl = null;
     if (this.#stageURL) {
       URL.revokeObjectURL(this.#stageURL);
       this.#stageURL = null;
@@ -416,10 +606,96 @@ class PhotoDetailView {
     this.#photo = null;
     this.#busy = false;
     // §12: focus returns to the originating tile on close.
-    if (this.#trigger && document.contains(this.#trigger)) {
+    if (restoreFocus && this.#trigger && document.contains(this.#trigger)) {
       this.#trigger.focus({ preventScroll: true });
     }
     this.#trigger = null;
+  }
+
+  /**
+   * §11.5.3 rule 6: a confirmed deletion of the photo open in the detail
+   * view closes both overlays (skip the focus return — the deleted tile is
+   * leaving the DOM; the §11.5.4 fallback chain takes over).
+   */
+  closeIfPhoto(idSet) {
+    if (this.#photo && idSet.has(this.#photo.id)) {
+      this.close({ restoreFocus: false });
+    }
+  }
+
+  /**
+   * Run the per-photo capability probe and — when a factor above 1× is
+   * supported — render the "Save HD copy" secondary entry in the bottom bar
+   * (§11.3.2: present only when upscaling is possible; a fully-clamped
+   * photo's entry is ABSENT, never disabled). The probe result is cached
+   * per photo inside the converter, so re-opening a viewed photo is instant.
+   */
+  async #probeHD(photo) {
+    const converter = this.#callbacks.getConverter?.();
+    if (!converter) {
+      return;
+    }
+    const seq = this.#probeSeq;
+    const max = await converter.probeMax(photo);
+    if (seq !== this.#probeSeq || this.#photo?.id !== photo.id) {
+      return; // closed or navigated away while probing
+    }
+    if (max <= 1) {
+      return; // Unavailable (§11.3.6): no button renders at all
+    }
+    if (this.#saveHdBtn || !this.#bottomEl) {
+      return;
+    }
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "btn-secondary detail__hd-entry";
+    save.textContent = "Save HD copy";
+    save.addEventListener("click", () => this.#openHDPanel(max));
+    // Insert before the primary download (§11.3.2: secondary beside it).
+    this.#bottomEl.insertBefore(save, this.#downloadBtn);
+    this.#saveHdBtn = save;
+  }
+
+  #openHDPanel(maxFactor) {
+    if (this.#hdPanel || !this.#photo) {
+      return;
+    }
+    const photo = this.#photo;
+    const converter = this.#callbacks.getConverter?.();
+    if (!converter) {
+      return;
+    }
+    // §11.3.2: while the panel is open, "Download this photo" demotes to
+    // secondary (fill swap only) so exactly one accent fill is on screen.
+    this.#downloadBtn.classList.remove("btn-primary");
+    this.#downloadBtn.classList.add("btn-secondary");
+    this.#hdPanel = new HDPanelView({
+      photo,
+      maxFactor,
+      converter,
+      onParkFocus: () => this.#doneBtn?.focus({ preventScroll: true }),
+      onAnnounce: (text) => this.#callbacks.announce?.(text),
+      onClose: () => this.#closeHDPanel(),
+    });
+    // Inline panel, directly above the bottom bar (§11.3.2).
+    this.#panel.insertBefore(this.#hdPanel.el, this.#bottomEl);
+    this.#hdPanel.focusSlider();
+  }
+
+  #closeHDPanel() {
+    this.#hdPanel?.destroy();
+    this.#hdPanel = null;
+    this.#restoreDownloadRole();
+    // Cancel returns focus to "Save HD copy" (§11.3.2 focus rule).
+    this.#saveHdBtn?.focus({ preventScroll: true });
+  }
+
+  /** "Download this photo" is the accent primary again once the panel is gone. */
+  #restoreDownloadRole() {
+    if (this.#downloadBtn) {
+      this.#downloadBtn.classList.add("btn-primary");
+      this.#downloadBtn.classList.remove("btn-secondary");
+    }
   }
 
   /* ------------------------------------------------------------------
@@ -459,6 +735,18 @@ class PhotoDetailView {
     filename.className = "detail__filename";
     top.appendChild(filename);
     this.#filenameEl = filename;
+
+    // §11.2/§11.5 layout consequence: the file-size caption yields its grid
+    // slot to the wider percentage chip and lives here instead — the detail
+    // view is where a photo's full facts belong.
+    const nameWrap = document.createElement("div");
+    nameWrap.className = "detail__name-wrap";
+    nameWrap.appendChild(filename);
+    const sizeLine = document.createElement("span");
+    sizeLine.className = "detail__size";
+    nameWrap.appendChild(sizeLine);
+    this.#sizeEl = sizeLine;
+    top.appendChild(nameWrap);
 
     const select = document.createElement("button");
     select.type = "button";
@@ -563,7 +851,12 @@ class PhotoDetailView {
     chipNum.className = "detail__chip-num";
     const chipWord = document.createElement("span");
     chipWord.className = "detail__chip-word";
-    chip.append(chipDot, chipNum, chipWord);
+    // The " · " separator (§11.2: "80% sharp · Blurry") is a space text node
+    // + the chipWord's "· " prefix. A space-only text node between flex
+    // items is never painted (the flex gap does that), but it keeps the DOM
+    // text — and the accessible reading — at "NN% sharp · Blurry" instead
+    // of mashing "sharp·".
+    chip.append(chipDot, chipNum, document.createTextNode(" "), chipWord);
     bottom.appendChild(chip);
     this.#chip = chip;
     this.#chipNum = chipNum;
@@ -586,7 +879,24 @@ class PhotoDetailView {
     this.#downloadLabel = downloadLabel;
     this.#spinner = spinner;
 
+    // §11.5.2: the detail "Delete" — the ONE red control outside the
+    // dialog, using the stage band token (--color-band-blurry-stage, 5.23:1
+    // on --color-stage; the white-surface red would measure ≈2.75:1 here).
+    // It opens the §11.5.3 confirmation dialog; it never deletes directly.
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn-text detail__delete";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      if (this.#photo) {
+        this.#callbacks.onRequestDelete?.(this.#photo, del);
+      }
+    });
+    bottom.appendChild(del);
+    this.#deleteBtn = del;
+
     panel.appendChild(bottom);
+    this.#bottomEl = bottom;
     return root;
   }
 
@@ -606,6 +916,14 @@ class PhotoDetailView {
 
   #showPhoto(photo) {
     this.#photo = photo;
+    // The converter entry and panel belong to the photo they were built
+    // for (§11.3.2): a navigation resets both and re-probes — the probe
+    // cache inside the converter makes re-visits instant.
+    this.#hdPanel?.destroy();
+    this.#hdPanel = null;
+    this.#restoreDownloadRole();
+    this.#saveHdBtn?.remove();
+    this.#saveHdBtn = null;
     if (this.#stageURL) {
       URL.revokeObjectURL(this.#stageURL);
     }
@@ -615,21 +933,32 @@ class PhotoDetailView {
     this.#img.src = this.#stageURL;
     this.#filenameEl.textContent = photo.name;
     this.#filenameEl.title = photo.name;
+    this.#sizeEl.textContent = formatBytes(photo.size);
     // The dialog CONTAINER carries the accessible name (APG Dialog pattern):
     // role="dialog" + aria-modal live on the panel, so the label must too.
     this.#panel.setAttribute("aria-label", `Reviewing ${photo.name}`);
 
-    // Stage chip (§8.2): dot + number + band word in the stage band tokens.
+    // Stage chip (§8.2 anatomy, §11.2 format): dot + "NN% sharp" + band
+    // word in the stage band tokens.
     const band = photo.band;
     this.#chip.className = "detail__chip";
     if (typeof photo.score === "number" && band && band !== BAND_SKIPPED) {
       this.#chip.classList.add(STAGE_BAND_CLASS[band] ?? "");
-      this.#chipNum.textContent = String(photo.score);
+      this.#chipNum.textContent = formatPercent(photo.score);
       this.#chipWord.textContent = `· ${BAND_LABELS[band]}`;
     } else {
       this.#chipNum.textContent = "—";
       this.#chipWord.textContent = band === BAND_SKIPPED ? "· Skipped" : "";
     }
+
+    // §11.5.2: the Delete control names what it removes.
+    this.#deleteBtn?.setAttribute(
+      "aria-label",
+      `Delete ${photo.name} from this session`,
+    );
+
+    // §11.3.3: the probe result must exist to decide the entry's presence.
+    this.#probeHD(photo);
   }
 
   #refreshSelect() {
@@ -710,8 +1039,13 @@ class PhotoDetailView {
     if (event.key !== "Tab") {
       return;
     }
-    // Focus trap (§12): cycle Tab within the panel while open.
-    const focusables = [...this.#panel.querySelectorAll("button:not([disabled])")];
+    // Focus trap (§12): cycle Tab within the panel while open. The range
+    // input of an open converter panel is a focusable control too, so the
+    // cycle list includes enabled inputs (native DOM order — no new
+    // machinery, §11.6.2).
+    const focusables = [
+      ...this.#panel.querySelectorAll("button:not([disabled]), input:not([disabled])"),
+    ];
     if (focusables.length === 0) {
       return;
     }
@@ -797,17 +1131,393 @@ function readStaggerMs() {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : STAGGER_FALLBACK_MS;
 }
 
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes < 0) {
-    return "";
+/* ======================================================================
+   HDPanelView — the §11.3.2 inline converter panel of the detail view:
+   "Save an HD copy" with the 1×–4× slider, the live old→new readout
+   carrying the MANDATED resolution number-slide (§11.4), and the exact
+   honesty copy (§11.3.5). Lives inside the detail dialog, above the
+   bottom bar; the existing panel-scoped focus trap contains it.
+   ====================================================================== */
+
+const HD_PANEL_COPY = {
+  heading: "Save an HD copy",
+  cancel: "Cancel",
+  apply: "Convert and save",
+  applyBusy: "Upscaling…",
+  helper: "Pick a larger size to save a copy.",
+  honesty: "Upscaled — enlarged, same captured detail.",
+  scope: "Saved as a download. It never re-enters the review — scores and bands stay with your originals.",
+  clampNote: (max) => `This browser supports up to ${max}× for this photo.`,
+  done: (name) => `Saved ${name}.`,
+  failed: "Couldn't upscale this photo. Nothing was changed.",
+  retry: "Try again",
+  announceDone: (name, width, height) => `${name} saved — ${width} × ${height}.`,
+};
+
+const FACTOR_LABEL = (factor) => `${factor}×`;
+
+class HDPanelView {
+  #photo;
+  #maxFactor;
+  #converter;
+  #onParkFocus;
+  #onAnnounce;
+  #onClose;
+
+  #el = null;
+  #slider = null;
+  #applyBtn = null;
+  #applyLabel = null;
+  #applySpinner = null;
+  #cancelBtn = null;
+  #helperEl = null;
+  #statusEl = null;
+  // §11.4 readout pieces
+  #outWindow = null;
+  #outSizer = null;
+  #outLine = null; // the line that most recently slid in (the visible value)
+  #factor = 1;
+  #busy = false;
+  #destroyed = false;
+
+  constructor({ photo, maxFactor, converter, onParkFocus, onAnnounce, onClose }) {
+    this.#photo = photo;
+    this.#maxFactor = maxFactor;
+    this.#converter = converter;
+    this.#onParkFocus = onParkFocus ?? null;
+    this.#onAnnounce = onAnnounce ?? null;
+    this.#onClose = onClose ?? null;
+    this.#build();
+    // §11.4 initial render: the current target appears WITHOUT animation —
+    // motion fires on change, never on entrance.
+    this.#setOutput(this.#targetFor(this.#factor), { animate: false });
   }
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
+
+  get el() {
+    return this.#el;
   }
-  const digits = value >= 100 || unitIndex === 0 ? 0 : 1;
-  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+
+  focusSlider() {
+    this.#slider?.focus();
+  }
+
+  destroy() {
+    this.#destroyed = true;
+    this.#el?.remove();
+    this.#el = null;
+  }
+
+  /* ------------------------------------------------------------------
+     DOM (anatomy per §11.3.2, top to bottom)
+     ------------------------------------------------------------------ */
+
+  #build() {
+    const el = document.createElement("div");
+    el.className = "hd-panel";
+    this.#el = el;
+
+    // Head: title + Cancel text button.
+    const head = document.createElement("div");
+    head.className = "hd-panel__head";
+    const title = document.createElement("h3");
+    title.className = "hd-panel__title";
+    title.textContent = HD_PANEL_COPY.heading;
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn-text";
+    cancel.textContent = HD_PANEL_COPY.cancel;
+    cancel.addEventListener("click", () => this.#onClose?.());
+    head.append(title, cancel);
+    el.appendChild(head);
+    this.#cancelBtn = cancel;
+
+    // Readout row: "Original W × H" static · "Output [animated] W′ × H′".
+    el.appendChild(this.#buildReadout());
+
+    // Slider row (shared native-range control with the batch dialog).
+    const sliderRow = buildHDSliderRow({
+      value: this.#factor,
+      max: this.#maxFactor,
+      register: (input) => {
+        this.#slider = input;
+      },
+      onInput: (factor) => this.#onSliderInput(factor),
+    });
+    el.appendChild(sliderRow);
+
+    // Clamp note — only when the probe clamps below the 4× ceiling (§11.3.3:
+    // the ceiling is always explained, never silently hit).
+    if (this.#maxFactor < MAX_UPSCALE_FACTOR) {
+      const clamp = document.createElement("p");
+      clamp.className = "hd-copy";
+      clamp.textContent = HD_PANEL_COPY.clampNote(this.#maxFactor);
+      el.appendChild(clamp);
+    }
+
+    // Honesty label (plan-mandated framing).
+    const honesty = document.createElement("p");
+    honesty.className = "hd-copy";
+    honesty.textContent = HD_PANEL_COPY.honesty;
+    el.appendChild(honesty);
+
+    // Format line: exactly what the download will be named and encoded as.
+    const format = document.createElement("p");
+    format.className = "hd-copy";
+    format.textContent = this.#formatLine();
+    el.appendChild(format);
+
+    // Apply: accent-filled primary; disabled at 1× with the helper line
+    // (§11.3.2 — a no-op conversion would silently re-encode).
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "btn-primary hd-panel__apply";
+    apply.disabled = true;
+    const applyLabel = document.createElement("span");
+    applyLabel.textContent = HD_PANEL_COPY.apply;
+    const applySpinner = document.createElement("span");
+    applySpinner.className = "spinner";
+    applySpinner.setAttribute("aria-hidden", "true");
+    applySpinner.hidden = true;
+    apply.append(applyLabel, applySpinner);
+    apply.addEventListener("click", () => this.#apply());
+    el.appendChild(apply);
+    this.#applyBtn = apply;
+    this.#applyLabel = applyLabel;
+    this.#applySpinner = applySpinner;
+
+    // Helper line for the disabled 1× state.
+    const helper = document.createElement("p");
+    helper.className = "hd-copy hd-copy--muted";
+    helper.textContent = HD_PANEL_COPY.helper;
+    el.appendChild(helper);
+    this.#helperEl = helper;
+
+    // Status line (done / failed + Try again) — under the apply button.
+    const status = document.createElement("p");
+    status.className = "hd-status";
+    status.hidden = true;
+    el.appendChild(status);
+    this.#statusEl = status;
+
+    // Scope caption.
+    const scope = document.createElement("p");
+    scope.className = "hd-copy hd-copy--muted";
+    scope.textContent = HD_PANEL_COPY.scope;
+    el.appendChild(scope);
+  }
+
+  #buildReadout() {
+    const photo = this.#photo;
+    const row = document.createElement("p");
+    row.className = "hd-readout";
+
+    const orig = document.createElement("span");
+    orig.className = "hd-readout__group hd-readout__group--orig";
+    orig.textContent = `Original ${photo.width} × ${photo.height}`;
+
+    const out = document.createElement("span");
+    out.className = "hd-readout__group hd-readout__group--out";
+    // The "·" separator survives flex-wrap inside the output group (the
+    // stage chip's "· Blurry" prefix pattern).
+    const sep = document.createElement("span");
+    sep.textContent = "·";
+    const label = document.createElement("span");
+    label.textContent = "Output";
+    const windowEl = document.createElement("span");
+    windowEl.className = "hd-readout__window";
+    // The sizer is a hidden static line that instantly reflows the window's
+    // width to the NEW value (§11.4: digit-count changes never transition).
+    const sizer = document.createElement("span");
+    sizer.className = "hd-readout__sizer";
+    sizer.setAttribute("aria-hidden", "true");
+    windowEl.appendChild(sizer);
+    out.append(sep, label, windowEl);
+
+    row.append(orig, out);
+    this.#outWindow = windowEl;
+    this.#outSizer = sizer;
+    return row;
+  }
+
+  /* ------------------------------------------------------------------
+     State
+     ------------------------------------------------------------------ */
+
+  #formatLine() {
+    const spec = hdOutputSpec(this.#photo.name);
+    if (spec.mime === "image/png") {
+      return `Saved as ${spec.name} · PNG`;
+    }
+    // "quality 92" derives from the JPEG_QUALITY constant (MAX_FILE_LABEL
+    // precedent — the copy can never drift from the enforced value).
+    return `Saved as ${spec.name} · JPEG, quality ${Math.round(JPEG_QUALITY * 100)}`;
+  }
+
+  #targetFor(factor) {
+    // THE one rounding rule (§11.3.2) — same call the converter makes.
+    return upscaleDimensions(this.#photo.width, this.#photo.height, factor);
+  }
+
+  #onSliderInput(factor) {
+    if (this.#busy) {
+      return;
+    }
+    const previous = this.#factor;
+    this.#factor = factor;
+    // §11.3.6 adjusting: apply enables above 1×; the helper line goes away.
+    this.#applyBtn.disabled = factor === 1;
+    this.#helperEl.hidden = factor !== 1;
+    if (factor !== previous) {
+      // §11.4: the Output value slides; direction follows the delta.
+      this.#setOutput(this.#targetFor(factor), { animate: true, direction: factor > previous ? 1 : -1 });
+    }
+  }
+
+  async #apply() {
+    if (this.#busy || !this.#converter || this.#factor === 1) {
+      return;
+    }
+    const photo = this.#photo;
+    const factor = this.#factor;
+    this.#busy = true;
+    this.#setControlsDisabled(true);
+    this.#applyLabel.textContent = HD_PANEL_COPY.applyBusy;
+    this.#applySpinner.hidden = false;
+    this.#setStatus(null); // clear the previous done/failed line
+
+    try {
+      const result = await this.#converter.convert(photo, factor);
+      triggerAnchorBlobDownload(result.blob, result.name);
+      if (!this.#destroyed) {
+        this.#setStatus({ text: HD_PANEL_COPY.done(result.name) });
+      }
+      // §11.6.4: one polite announcement, once, on download.
+      this.#onAnnounce?.(HD_PANEL_COPY.announceDone(result.name, result.width, result.height));
+    } catch {
+      if (!this.#destroyed) {
+        this.#setStatus({ text: HD_PANEL_COPY.failed, retry: true });
+      }
+    } finally {
+      this.#busy = false;
+      if (!this.#destroyed) {
+        this.#setControlsDisabled(false);
+        this.#applyLabel.textContent = HD_PANEL_COPY.apply;
+        this.#applySpinner.hidden = true;
+        this.#applyBtn.disabled = this.#factor === 1;
+      }
+    }
+  }
+
+  #setControlsDisabled(disabled) {
+    // Focus-robust disable (the detail view's #setDisabled pattern): the
+    // moment a focused control disables, park focus on the detail dialog's
+    // Done button so the Tab trap and Escape keep working.
+    const focused = [...this.#el.querySelectorAll("button, input")].some(
+      (control) => control === document.activeElement,
+    );
+    this.#slider.disabled = disabled;
+    this.#applyBtn.disabled = disabled || this.#factor === 1;
+    this.#cancelBtn.disabled = disabled;
+    if (disabled && focused) {
+      this.#onParkFocus?.();
+    }
+  }
+
+  #setStatus(options) {
+    const { text, retry = false } = options ?? {};
+    const status = this.#statusEl;
+    status.replaceChildren();
+    status.hidden = !text;
+    if (!text) {
+      return;
+    }
+    status.append(document.createTextNode(text));
+    if (retry) {
+      const again = document.createElement("button");
+      again.type = "button";
+      again.className = "btn-text hd-status__retry";
+      again.textContent = HD_PANEL_COPY.retry;
+      again.addEventListener("click", () => this.#apply());
+      status.append(document.createTextNode(" "), again);
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     §11.4 — the mandated resolution number-slide
+     ------------------------------------------------------------------ */
+
+  /**
+   * Render the Output value. `direction`: +1 = the target grew (incoming
+   * rises from below), −1 = it shrank (incoming drops in from above),
+   * 0/omitted = no motion (initial render and reduced motion).
+   *
+   * Mechanics: the window is a one-line clipped box; the outgoing line
+   * starts at its CURRENT visual offset (read off computed style, so a
+   * change that lands mid-flight restarts from there — §11.4 rapid-change
+   * rule: never a stale number, never a queued burst) and slides one line
+   * out in the slide direction while the incoming line takes its place.
+   * Transform-only; the window's width reflows instantly via the hidden
+   * sizer (never transitioned).
+   */
+  #setOutput(target, { animate = false, direction = 0 } = {}) {
+    const text = `${target.width} × ${target.height}`;
+    const windowEl = this.#outWindow;
+    const reducedMotion =
+      typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (!animate || direction === 0 || reducedMotion) {
+      // Instant, crossfade-free swap (§11.4 reduced-motion rule).
+      this.#outSizer.textContent = text;
+      this.#clearLines();
+      const line = document.createElement("span");
+      line.className = "hd-readout__line";
+      line.textContent = text;
+      windowEl.appendChild(line);
+      this.#outLine = line;
+      return;
+    }
+
+    const lineH = windowEl.clientHeight;
+    if (!(lineH > 0)) {
+      // Window not laid out (hidden/zero) — degrade to the instant swap.
+      this.#setOutput(target, { animate: false });
+      return;
+    }
+
+    // Current visual offset of the outgoing value (mid-flight aware).
+    let offset = 0;
+    if (this.#outLine) {
+      const transform = getComputedStyle(this.#outLine).transform;
+      if (transform && transform !== "none") {
+        const ty = Number.parseFloat(transform.slice(transform.lastIndexOf(",") + 1));
+        if (Number.isFinite(ty)) {
+          offset = ty;
+        }
+      }
+    }
+
+    const outText = this.#outSizer.textContent ?? text;
+    this.#clearLines();
+    const outLine = document.createElement("span");
+    outLine.className = "hd-readout__line";
+    outLine.textContent = outText;
+    const inLine = document.createElement("span");
+    inLine.className = "hd-readout__line";
+    inLine.textContent = text;
+    outLine.style.transform = `translateY(${offset}px)`;
+    inLine.style.transform = `translateY(${offset + direction * lineH}px)`;
+    windowEl.append(outLine, inLine);
+    // Width reflows to the NEW value instantly (sizer), then the slide runs.
+    this.#outSizer.textContent = text;
+    void windowEl.offsetWidth; // commit the start positions before transitioning
+    outLine.style.transform = `translateY(${-direction * lineH}px)`;
+    inLine.style.transform = "translateY(0)";
+    this.#outLine = inLine;
+  }
+
+  #clearLines() {
+    for (const line of [...this.#outWindow.querySelectorAll(".hd-readout__line")]) {
+      line.remove();
+    }
+  }
 }

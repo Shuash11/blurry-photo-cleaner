@@ -9,6 +9,9 @@
  * scores persist.
  *
  *   picker / drop / folder pick → handleFilesChosen()
+ *     → intake caps (INF-1): files over MAX_FILE_BYTES and items beyond
+ *       MAX_BATCH_FILES are partitioned out before any decode and join
+ *       their own skip ledgers (§9e-style notices, never silent)
  *     → placeholders appear immediately (instant feedback, §8.1 loading state)
  *     → PhotoStore.createRecord() decode-verifies each file for real
  *     → resolved records become thumbnails; failures become the §9e notice
@@ -21,9 +24,16 @@
  */
 
 import { BlurAnalyzer } from "./BlurAnalyzer.js";
+import { HDConverter } from "./HDConverter.js";
 import { ResultsView } from "./ResultsView.js";
 import { ReviewControls } from "./ReviewControls.js";
-import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP } from "./Thresholds.js";
+import {
+  BAND_BLURRY,
+  BAND_REVIEW,
+  BAND_SHARP,
+  MAX_BATCH_FILES,
+  MAX_FILE_BYTES,
+} from "./Thresholds.js";
 
 const DECODE_CONCURRENCY = 4; // keeps big folder picks responsive without memory spikes
 
@@ -32,6 +42,7 @@ export class App {
   #view;
   #startOverBtn;
   #analyzer;
+  #hdConverter;
   #resultsView;
   #reviewControls;
   #fileInput;
@@ -48,6 +59,14 @@ export class App {
   // fine but have no visible pixels to score.
   #analysisSkippedNames = [];
   #analysisSkipDismissed = false;
+  // Intake-cap ledgers (INF-1): same skip-ledger pattern, for files
+  // rejected before decode — over the per-file size cap, or beyond the
+  // per-batch count cap. Names accumulate across batches until dismissed
+  // or start-over, exactly like #skippedNames.
+  #oversizeNames = [];
+  #oversizeDismissed = false;
+  #overCountNames = [];
+  #overCountDismissed = false;
   // Phase 3 analysis state, exposed for the Phase 4 analyzing UI (§9b):
   // { phase: "idle" | "analyzing" | "failed", done, total, currentName }
   #analysisState = { phase: "idle", done: 0, total: 0, currentName: null };
@@ -57,6 +76,7 @@ export class App {
     this.#view = view;
     this.#startOverBtn = startOverBtn;
     this.#analyzer = new BlurAnalyzer();
+    this.#hdConverter = new HDConverter();
 
     // Same markup contract main.js already asserts (index.html); these are
     // the remaining Phase 4 mount points.
@@ -67,13 +87,28 @@ export class App {
       root: document.getElementById("view-root"),
       callbacks: {
         onSelectionChange: () => this.#syncSelectionCount(),
+        // §11.3: the detail view consumes the converter for the capability
+        // probe (entry gate) and the per-photo conversion.
+        getConverter: () => this.#hdConverter,
+        announce: (text) => this.#view.announce(text),
+        // §11.5.4: the dialog confirmed — App performs the removal.
+        onDeletePhotos: (ids) => this.#deletePhotos(ids),
       },
     });
     this.#reviewControls = new ReviewControls({
       getSelectedFiles: () =>
         this.#resultsView.getSelectedPhotos().map((photo) => photo.file),
+      getSelectedPhotos: () => this.#resultsView.getSelectedPhotos(),
+      getConverter: () => this.#hdConverter,
       onAddMore: () => this.#view.openFilePicker(),
+      // §11.5.2: the action-bar trigger forwards to the shared dialog via
+      // ResultsView (the single delete gate).
+      onDeleteSelected: (trigger) =>
+        this.#resultsView.requestDeleteSelected(trigger),
       announce: (text) => this.#view.announce(text),
+      // §11.3.4: while a batch HD conversion runs, tiles are inert to
+      // selection toggles — downloads match the confirmed selection.
+      onLockChange: (locked) => this.#resultsView.setSelectionLocked(locked),
     });
 
     this.#startOverBtn.addEventListener("click", () => this.startOver());
@@ -126,12 +161,17 @@ export class App {
     }
     this.#store.clear(); // revokes every thumbnail object URL
     this.#analyzer.dispose(); // release the worker thread; next batch starts fresh
+    this.#hdConverter.dispose(); // same discipline for the upscale worker + probe cache
     this.#reviewControls.unmount(); // results action bar goes with the results
     this.#mode = "empty";
     this.#skippedNames = [];
     this.#noticeDismissed = false;
     this.#analysisSkippedNames = [];
     this.#analysisSkipDismissed = false;
+    this.#oversizeNames = [];
+    this.#oversizeDismissed = false;
+    this.#overCountNames = [];
+    this.#overCountDismissed = false;
     this.#analysisState = { phase: "idle", done: 0, total: 0, currentName: null };
     this.#view.renderEmpty("default"); // also removes any mounted §9e notice
     this.#setTitle("Blurry Photo Cleaner");
@@ -141,13 +181,20 @@ export class App {
 
   /**
    * Dismiss callback from the §9e notices: the matching ledger clears with
-   * it. kind is "undecodable" (Phase 2 intake skips) or "analysis-skip"
-   * (Phase 3 no-visible-pixel skips).
+   * it. kind is "undecodable" (Phase 2 intake skips), "analysis-skip"
+   * (Phase 3 no-visible-pixel skips), "oversize" (INF-1 size cap), or
+   * "over-count" (INF-1 batch cap).
    */
   handleNoticeDismissed(kind = "undecodable") {
     if (kind === "analysis-skip") {
       this.#analysisSkippedNames = [];
       this.#analysisSkipDismissed = true;
+    } else if (kind === "oversize") {
+      this.#oversizeNames = [];
+      this.#oversizeDismissed = true;
+    } else if (kind === "over-count") {
+      this.#overCountNames = [];
+      this.#overCountDismissed = true;
     } else {
       this.#skippedNames = [];
       this.#noticeDismissed = true;
@@ -172,14 +219,21 @@ export class App {
     const totalBefore = this.#store.count;
     const existing = this.#store.photos.slice();
 
-    const placeholders = items.map((item) => ({
+    // INF-1: enforce the intake caps before any placeholder or decode —
+    // oversize files are never read into memory, and over-count items
+    // never enter the gallery. Both join their own skip ledgers below.
+    const { accepted, oversizeNames, overCountNames } = partitionIntake(items);
+
+    const placeholders = accepted.map((item) => ({
       id: this.#view.nextPlaceholderId(),
-      name: typeof item.name === "string" && item.name.length > 0 ? item.name : "Unnamed file",
+      name: describeIntakeName(item),
       size: typeof item.size === "number" && item.size >= 0 ? item.size : 0,
     }));
     this.#view.beginBatch(placeholders, totalBefore + placeholders.length, existing);
 
-    const results = await runPool(items, DECODE_CONCURRENCY, async (item, index) => {
+    // Decode-verify only what passed the caps; placeholder indices align
+    // with `accepted` because both are built from the same array.
+    const results = await runPool(accepted, DECODE_CONCURRENCY, async (item, index) => {
       const placeholder = placeholders[index];
       try {
         if (!(item instanceof File)) {
@@ -209,23 +263,52 @@ export class App {
       this.#noticeDismissed = false;
     }
 
+    if (oversizeNames.length > 0) {
+      this.#oversizeNames.push(...oversizeNames);
+      this.#oversizeDismissed = false;
+    }
+
+    if (overCountNames.length > 0) {
+      this.#overCountNames.push(...overCountNames);
+      this.#overCountDismissed = false;
+    }
+
     // §10: the notice shows in every later state until dismissed, and counts
     // everywhere exclude skipped files. The all-failed empty variant (§9e)
-    // replaces the notice when nothing could be loaded at all.
+    // replaces the notice when nothing could be loaded at all. The INF-1
+    // ledgers follow the identical pattern; the view has one notice slot,
+    // so when several ledgers are pending the later card is the one
+    // visible — each ledger re-surfaces on the next batch that adds to it,
+    // exactly like the analysis-skip ledger.
     if (this.#skippedNames.length > 0 && !this.#noticeDismissed && this.#store.count > 0) {
       this.#view.showUndecodableNotice(this.#skippedNames);
     }
 
+    if (this.#oversizeNames.length > 0 && !this.#oversizeDismissed && this.#store.count > 0) {
+      this.#view.showOversizeNotice(this.#oversizeNames);
+    }
+
+    if (this.#overCountNames.length > 0 && !this.#overCountDismissed && this.#store.count > 0) {
+      this.#view.showOverCountNotice(this.#overCountNames);
+    }
+
     // Every file in the batch failed and nothing was loaded before:
-    // §9e all-failed variant of the empty state. The empty-state composition
+    // §9e all-failed variant of the empty state. When size was the only
+    // reason anything failed, the copy names the size limit instead of the
+    // decode reason (INF-1 honest copy). The empty-state composition
     // carries no role="status" of its own, so the outcome must be announced
     // through the polite live region (WCAG 2.2 SC 4.1.3 — "no results
     // returned" is a status message). Both intake routes (picker, drop,
     // folder) funnel through this single call site.
     if (this.#store.count === 0) {
       this.#mode = "empty";
-      this.#view.renderEmpty("all-failed");
-      this.#view.announce("Couldn't open those files. Nothing was added.");
+      const oversizeOnly = this.#skippedNames.length === 0 && this.#oversizeNames.length > 0;
+      this.#view.renderEmpty(oversizeOnly ? "all-failed-oversize" : "all-failed");
+      this.#view.announce(
+        oversizeOnly
+          ? "Those files were too large. Nothing was added."
+          : "Couldn't open those files. Nothing was added.",
+      );
       this.#updateStartOver();
       return;
     }
@@ -348,6 +431,61 @@ export class App {
     }
   }
 
+  /**
+   * §11.5.4 confirmed session delete (the dialog is the only gate): remove
+   * the records — the store revokes their thumbnail URLs — then re-render
+   * the results in place (§11.5.1: removal is instant, no exit animation,
+   * no band-reveal re-run), re-show any pending §9e ledgers (the notice
+   * host re-mounts with the results), sync the action bar, and fire the
+   * ONE polite removal announcement (§11.5.4). When the last photo goes,
+   * the app returns to the empty state (§10) with the same announcement —
+   * re-adding files is the same honesty as "Start over" (no undo in v2).
+   * Guarded to results mode so a stray call can never corrupt a pending
+   * batch ("Delete selected" is disabled while a conversion runs).
+   */
+  #deletePhotos(ids) {
+    if (this.#mode !== "results") {
+      return;
+    }
+    const removed = this.#store.remove(ids);
+    if (removed.length === 0) {
+      return;
+    }
+
+    if (this.#store.count === 0) {
+      this.#reviewControls.unmount();
+      this.#view.setNoticeHost(null);
+      this.#mode = "empty";
+      this.#view.renderEmpty("default");
+      this.#setTitle("Blurry Photo Cleaner");
+      this.#updateStartOver();
+    } else {
+      this.#enterResults({ animate: false });
+      // §10: pending ledgers re-surface above the re-rendered results
+      // (the notice host re-mounts empty on every render).
+      if (this.#skippedNames.length > 0 && !this.#noticeDismissed) {
+        this.#view.showUndecodableNotice(this.#skippedNames);
+      }
+      if (this.#oversizeNames.length > 0 && !this.#oversizeDismissed) {
+        this.#view.showOversizeNotice(this.#oversizeNames);
+      }
+      if (this.#overCountNames.length > 0 && !this.#overCountDismissed) {
+        this.#view.showOverCountNotice(this.#overCountNames);
+      }
+      if (this.#analysisSkippedNames.length > 0 && !this.#analysisSkipDismissed) {
+        this.#view.showAnalysisSkippedNotice(this.#analysisSkippedNames);
+      }
+    }
+
+    // §11.5.4: one polite announcement, then silence — no toast, no undo.
+    const n = removed.length;
+    this.#view.announce(
+      n === 1
+        ? `${removed[0].name} removed from this session.`
+        : `${n} photos removed from this session.`,
+    );
+  }
+
   /** §12 completion announcement: "Analysis complete: 12 blurry, 5 need review, 7 sharp". */
   #analysisCompleteMessage() {
     const photos = this.#store.photos;
@@ -387,6 +525,8 @@ export class App {
         skipMessage: photo.skipMessage ?? null,
       })),
       skippedFiles: [...this.#skippedNames],
+      skippedOversize: [...this.#oversizeNames],
+      skippedOverCount: [...this.#overCountNames],
       skippedAnalysis: [...this.#analysisSkippedNames],
     };
   }
@@ -396,6 +536,48 @@ export class App {
     this.#startOverBtn.hidden =
       this.#store.count === 0 || this.#analysisState.phase === "analyzing";
   }
+}
+
+/**
+ * INF-1 intake caps: split a chosen batch into what may load and what must
+ * be skipped, with the reason for each skip.
+ *
+ *   oversize — File instances larger than MAX_FILE_BYTES. Checked before
+ *     any placeholder tile or decode attempt, so an oversize file is never
+ *     read into memory.
+ *   overCount — items beyond MAX_BATCH_FILES, applied AFTER the size filter
+ *     so the count cap never wastes room on files that could not load
+ *     anyway. Items within the cap keep loading (the plan's "valid files
+ *     unaffected"); only the excess beyond the limit is rejected.
+ *
+ * Unreadable folder-walk markers ({ name, unreadable }) are not Files, so
+ * they pass through to the decode path, which fails them into the
+ * undecodable ledger as before (they stay inside the count cap — they are
+ * tiny markers that never store anything).
+ */
+function partitionIntake(items) {
+  const withinSizeCap = [];
+  const oversizeNames = [];
+  for (const item of items) {
+    if (item instanceof File && item.size > MAX_FILE_BYTES) {
+      oversizeNames.push(describeIntakeName(item));
+    } else {
+      withinSizeCap.push(item);
+    }
+  }
+
+  const accepted = withinSizeCap.slice(0, MAX_BATCH_FILES);
+  const overCountNames = withinSizeCap
+    .slice(MAX_BATCH_FILES)
+    .map((item) => describeIntakeName(item));
+
+  return { accepted, oversizeNames, overCountNames };
+}
+
+/** Same name normalization the placeholder tiles use, so a ledger name
+ *  always matches what the grid would have shown for that file. */
+function describeIntakeName(item) {
+  return typeof item?.name === "string" && item.name.length > 0 ? item.name : "Unnamed file";
 }
 
 /**

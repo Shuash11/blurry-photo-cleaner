@@ -1,36 +1,42 @@
 /* ==========================================================================
    Blurry Photo Cleaner — styles
-   Built to designs/design-spec.md (Phase 1 design of record).
-   Tokens below are the spec's named values, unchanged (§3–§6).
+   Built to designs/design-spec-v2.md (v0.2.0 design of record, Phase R3
+   restyle); v1 sections it supersedes are listed in the v2 spec §1/§10.
+   Color/depth/motion tokens are the v2 set (§4); typography and spacing
+   carry from v1 unchanged (§4.7).
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   Design tokens — color (§3)
+   Design tokens — color/depth/motion (design-spec-v2 §4.7 drop-in block)
    -------------------------------------------------------------------------- */
 :root {
-  /* §3.1 Surfaces and text */
-  --color-bg: #F2F2F7;
+  /* §4.1 — surfaces (the cool-neutral ladder) */
+  --color-bg: #F2F3F5;
   --color-surface: #FFFFFF;
-  --color-surface-muted: #F2F2F7;
-  --color-fill-pressed: #E5E5EA;
-  --color-text: #000000;
-  --color-text-secondary: #636366;
-  --color-text-muted: #6E6E73;
-  --color-hairline: rgba(0, 0, 0, 0.08);
-  --color-separator-strong: rgba(0, 0, 0, 0.15);
-  --color-hover-overlay: rgba(0, 0, 0, 0.04);
+  --color-surface-muted: #EEF1F4;
+  --color-fill-pressed: #E1E5EA;
 
-  /* §3.2 Accent — one accent only; never as text color. Accent TEXT on
-     non-white surfaces uses --color-accent-text (§3.2 rule, Phase 2 fix F-1). */
-  --color-accent: #0088FF;
-  --color-accent-strong: #1E6EF4;
-  --color-accent-text: #0F4CBD;
-  --color-accent-subtle: rgba(0, 136, 255, 0.10);
-  --color-accent-press: #1A63DB;
+  /* §4.1 — text ramp */
+  --color-text: #16191E;
+  --color-text-secondary: #57606C;
+  --color-text-muted: #646E7B;
 
-  /* §3.3 Band colors — text-safe and tint values (used from Phase 3 on).
-     Band TEXT on tints or the grouped background uses --color-band-*-text
-     (§3.3 rule, Phase 4 fix F1/F2): the base text values are certified on
+  /* §4.5 — structure */
+  --color-hairline: rgba(22, 25, 31, 0.10);
+  --color-separator-strong: rgba(22, 25, 31, 0.16);
+  --color-hover-overlay: rgba(22, 25, 31, 0.05);
+  --color-track: rgba(22, 25, 31, 0.06);          /* progress-bar track (was inline) */
+
+  /* §4.2 — accent: ONE token does fill + text on every surface (v1's
+     accent-strong/accent-text pair and its surface rule are retired). */
+  --color-accent: #2E5C95;
+  --color-accent-hover: #366399;                  /* primary fill on hover (pointer devices) */
+  --color-accent-press: #275084;
+  --color-accent-subtle: rgba(46, 92, 149, 0.10);
+
+  /* §4.3 — band colors (values unchanged from v1; re-certified on v2
+     composites). Band TEXT on tints or the grouped background uses
+     --color-band-*-text (§4.3 rule): the base text values are certified on
      white only and fail on the tinted chip composite. */
   --color-band-blurry: #E9152D;
   --color-band-review: #C55300;
@@ -42,13 +48,13 @@
   --color-band-review-tint: rgba(197, 83, 0, 0.10);
   --color-band-sharp-tint: rgba(0, 137, 50, 0.10);
 
-  /* §3.4 Media stage and overlays (Phase 4: detail view) */
-  --color-stage: #1C1C1E;
+  /* §4.4 — media stage and overlays (detail view) */
+  --color-stage: #14171C;
   --color-stage-text: #FFFFFF;
-  --color-scrim: rgba(0, 0, 0, 0.44);
-  /* §8.2 stage band tokens: the light-appearance band text values fail
-     contrast on the dark stage, so the detail chip uses these dark-mode
-     HIG variants (all ≥≈4.9:1 on #1C1C1E). Stage-only. */
+  --color-scrim: rgba(11, 14, 19, 0.44);
+  /* Stage band tokens: the light-appearance band text values fail contrast
+     on the dark stage, so the detail chip uses these dark-mode HIG variants
+     (re-certified on the v2 stage, §4.4/§4.9 pairs 30–32). Stage-only. */
   --color-band-blurry-stage: #FF4245;
   --color-band-review-stage: #FFA056;
   --color-band-sharp-stage: #4AD968;
@@ -73,7 +79,7 @@
   --text-caption-2: 0.6875rem;    --line-caption-2: 0.8125rem;    --track-caption-2: 0.006em;    /* 11/13 */
 
   /* --------------------------------------------------------------------------
-     Design tokens — spacing (§5.1, 4px grid), radius (§5.2), depth (§5.3)
+     Design tokens — spacing (§5.1 v1, 4px grid; unchanged in v2)
      -------------------------------------------------------------------------- */
   --space-2: 2px;
   --space-4: 4px;
@@ -86,19 +92,22 @@
   --space-48: 48px;
   --space-64: 64px;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  /* §4.6 — radius (nested rule unchanged: inner = outer − padding, floor 4) */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
   --radius-full: 999px;
 
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-floating: 0 8px 24px rgba(0, 0, 0, 0.06);
+  /* §4.5 — depth */
+  --shadow-card: 0 1px 2px rgba(15, 18, 24, 0.06);
+  --shadow-floating: 0 8px 24px rgba(15, 18, 24, 0.08);
 
   /* --------------------------------------------------------------------------
-     Design tokens — motion (§6). Only color/background-color/border-color/
-     opacity/transform are ever transitioned.
+     Design tokens — motion (§4.6; v1 §6 durations and the allowed-motion
+     list unchanged). Only color/background-color/border-color/opacity/
+     transform are ever transitioned.
      -------------------------------------------------------------------------- */
-  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.25, 1, 0.5, 1);
   --duration-fast: 120ms;
   --duration-standard: 200ms;
   --duration-slow: 320ms;
@@ -161,7 +170,7 @@ img {
 .icon--mark {
   width: 16px;
   height: 16px;
-  color: var(--color-accent-strong);
+  color: var(--color-accent);
 }
 
 .visually-hidden {
@@ -186,7 +195,7 @@ img {
 
 /* Single visible focus style (§12): :focus-visible only, never on pointer clicks. */
 :focus-visible {
-  outline: 2px solid var(--color-accent-strong);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -256,14 +265,15 @@ img {
 }
 
 .btn-primary {
-  background: var(--color-accent-strong);
+  background: var(--color-accent);
   color: var(--color-surface);
 }
 
 @media (hover: hover) {
   .btn-primary:hover {
-    /* "fill lightens 4%" (§8.1): accent-strong #1E6EF4 toward white */
-    background: #2774F4;
+    /* "fill lightens 4%" (§8.1): the accent mixed 4% toward white — the
+       --color-accent-hover token (design-spec-v2 §4.8 literal map). */
+    background: var(--color-accent-hover);
   }
 }
 
@@ -295,7 +305,10 @@ img {
   padding: 0 var(--space-20);
 }
 
-/* Text button (§8.1) */
+/* Text button (§8.1, design-spec-v2 §5): the label is always --color-accent,
+   on every surface — white cards, the grouped background, and the translucent
+   header. No surface-dependent variant exists (§5 rule); the 32px pointer
+   density is the .btn-text--compact modifier (fine pointers only, below). */
 .btn-text {
   display: inline-flex;
   align-items: center;
@@ -308,7 +321,7 @@ img {
   line-height: var(--line-headline);
   letter-spacing: var(--track-headline);
   font-weight: 600;
-  color: var(--color-accent-strong);
+  color: var(--color-accent);
   cursor: pointer;
   transition: opacity var(--duration-fast) var(--ease-standard);
 }
@@ -326,16 +339,6 @@ img {
 .btn-text:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-/* Accent text on non-white surfaces (§3.2 rule, Phase 2 fix F-1): these text
-   buttons sit on the translucent header and the grouped background, never on
-   a white card, so they use the darker --color-accent-text (#0F4CBD ≥4.5:1 on
-   both, including content scrolled beneath the header). Text buttons on white
-   surfaces (notice "Dismiss") keep --color-accent-strong. */
-.app-header .btn-text,
-.gallery-toolbar .btn-text {
-  color: var(--color-accent-text);
 }
 
 .btn-primary:disabled {
@@ -504,12 +507,9 @@ img {
   color: var(--color-text-muted);
 }
 
-/* Toolbar action mirrors the band-header "Select all" pattern (§8.1).
-   Touch target ≥44px on mobile (§12); 32px with generous spacing on
-   pointer devices (§7.3) — the 32px override lives in the ≥768px block. */
-.gallery-toolbar .btn-text {
-  min-height: 44px;
-}
+/* Toolbar action mirrors the band-header "Select all" pattern (§8.1):
+   a .btn-text with the btn-text--compact modifier in markup for the
+   32px fine-pointer density (design-spec-v2 §5). */
 
 .photo-grid {
   display: grid;
@@ -559,16 +559,10 @@ img {
   margin-top: var(--space-2);
 }
 
-.tile__size {
-  font-size: var(--text-caption-2);
-  line-height: var(--line-caption-2);
-  letter-spacing: var(--track-caption-2);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
-}
-
-/* Score chip (§8.1) — the app's signature element. Pending state: muted dot
-   + "—" so the grid height never jumps when scores land in Phase 3. */
+/* Score chip (§8.1, §11.2 format) — the app's signature element. The text
+   is "NN% sharp" (tabular so grids of chips align and widths stay stable).
+   Pending state: muted dot + "—" so the grid height never jumps when scores
+   land in Phase 3; a skipped photo keeps "—" (never "0% sharp", §11.2). */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -646,15 +640,11 @@ img {
   margin-top: var(--space-12);
 }
 
+/* Notice disclosure summary: joins the .btn-text component in markup
+   (design-spec-v2 §5) — class "notice__summary btn-text btn-text--compact",
+   so type, color, and target size all come from the component. The leftover
+   rules here are layout-only (a <summary> is not a button). */
 .notice__summary {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px; /* touch target on mobile (§12); 32px on pointer devices below */
-  font-size: var(--text-footnote);
-  line-height: var(--line-footnote);
-  letter-spacing: var(--track-footnote);
-  color: var(--color-accent-strong);
-  cursor: pointer;
   list-style: none;
 }
 
@@ -690,10 +680,6 @@ img {
   margin-top: var(--space-12);
 }
 
-.notice__footer .btn-text {
-  min-height: 44px;
-}
-
 /* --------------------------------------------------------------------------
    Phase 4 — §9b analysis progress card
    -------------------------------------------------------------------------- */
@@ -724,13 +710,13 @@ img {
   color: var(--color-text-secondary);
 }
 
-/* Determinate bar: 4px, track rgba(0,0,0,0.06), accent fill moved with
-   scaleX only — never width (§6.1). */
+/* Determinate bar: 4px, --color-track (§4.5: was inline rgba(0,0,0,0.06)),
+   accent fill moved with scaleX only — never width (§6.1). */
 .progress-card__bar {
   height: 4px;
   margin-top: var(--space-12);
   border-radius: var(--radius-full);
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--color-track);
   overflow: hidden;
 }
 
@@ -749,6 +735,17 @@ img {
    -------------------------------------------------------------------------- */
 .results {
   padding-bottom: 176px; /* clearance for the fixed action bar (+ safe area below) */
+}
+
+/* §11.2 percentage subtitle — one instance per results view, directly above
+   the first band header (below the §9e notice slot). Secondary text on the
+   page background; the .band margin-top below it supplies the gap. */
+.results__subtitle {
+  margin: 0;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  letter-spacing: var(--track-subhead);
+  color: var(--color-text-secondary);
 }
 
 .band {
@@ -818,7 +815,7 @@ img {
 .band__toggle {
   margin-left: auto;
   min-height: 44px;
-  color: var(--color-accent-text); /* §3.2: accent text on a non-white surface */
+  color: var(--color-accent); /* design-spec-v2 §5: one accent on every surface */
 }
 
 .band__empty {
@@ -872,7 +869,7 @@ img {
 /* Selected: 2px inset accent ring (instant, §6.2) + accent-subtle tint
    overlay + 20px check badge (scales 0.9 → 1). */
 .results .tile__photo.is-selected {
-  box-shadow: inset 0 0 0 2px var(--color-accent-strong);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
 .results .tile__photo.is-selected::before {
@@ -892,7 +889,7 @@ img {
   width: 20px;
   height: 20px;
   border-radius: var(--radius-full);
-  background: var(--color-accent-strong);
+  background: var(--color-accent);
   color: var(--color-surface);
   pointer-events: none; /* the badge is not a separate target (§12) */
 }
@@ -1109,9 +1106,13 @@ img {
   flex-shrink: 0;
 }
 
-.detail__filename {
+.detail__name-wrap {
   flex: 1;
   min-width: 0;
+  text-align: center;
+}
+
+.detail__filename {
   margin: 0;
   text-align: center;
   font-size: var(--text-headline);
@@ -1122,6 +1123,21 @@ img {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--color-stage-text);
+}
+
+/* §11.5: the file-size caption under the filename (moved from the grid in
+   R4's §11.2 layout consequence). Stage white at reduced opacity — the same
+   sanctioned white-alpha pattern as the stage veils; ≈9:1 on #14171C. */
+.detail__size {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  color: var(--color-stage-text);
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .detail__select {
@@ -1299,6 +1315,345 @@ img {
   outline-color: var(--color-stage-text);
 }
 
+/* ...but controls on WHITE cards inside the stage (the converter panel)
+   keep the standard accent ring — stage text (white) would be invisible on
+   the card fill (§12 ring rule is a stage rule, not a card rule). */
+.hd-panel :focus-visible,
+.hd-dialog :focus-visible {
+  outline-color: var(--color-accent);
+}
+
+/* --------------------------------------------------------------------------
+    Phase R5 — §11.3 HD converter (per-photo panel + batch dialog)
+    -------------------------------------------------------------------------- */
+
+/* §11.3.2 inline panel: a white card on the dark stage, directly above the
+   bottom bar. Entrance: fade only (the notice-card entrance — it is an
+   expansion, not a new layer). Every token below is a certified white-
+   surface pair (§11.6.7) — zero new hex. */
+.hd-panel {
+  margin: var(--space-8) var(--space-16) 0;
+  padding: var(--space-16);
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  color: var(--color-text);
+  animation: hd-fade-in var(--duration-standard) var(--ease-standard);
+}
+
+@keyframes hd-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.hd-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.hd-panel__title {
+  margin: 0;
+  font-size: var(--text-title-3);
+  line-height: var(--line-title-3);
+  letter-spacing: var(--track-title-3);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* §11.3.2 readout row: "Original W × H · Output W′ × H′". Mono + tabular;
+   wraps under the Original group at narrow widths (the §11.7b wireframe). */
+.hd-readout {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-12);
+  row-gap: var(--space-2);
+  margin: var(--space-16) 0 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  color: var(--color-text);
+}
+
+.hd-readout__group {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  white-space: nowrap;
+}
+
+.hd-readout__group--orig {
+  color: var(--color-text-secondary);
+}
+
+.hd-readout__group--out .hd-readout__sep,
+.hd-readout__group--out .hd-readout__window {
+  color: var(--color-text);
+}
+
+.hd-readout__sep {
+  color: var(--color-text-muted);
+}
+
+/* §11.4 the mandated window: a one-line clipped box. The hidden sizer
+   reflows the width instantly to the NEW value (never transitioned); the
+   lines slide transform-only. */
+.hd-readout__window {
+  position: relative;
+  display: inline-block;
+  height: var(--line-subhead);
+  overflow: hidden;
+}
+
+.hd-readout__sizer {
+  display: block;
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.hd-readout__line {
+  position: absolute;
+  inset: 0;
+  display: block;
+  white-space: nowrap;
+  transition: transform var(--duration-standard) var(--ease-standard);
+}
+
+/* §11.3.2 slider row: 44px hit row, 20px accent thumb, filled track = the
+   sanctioned accent hard-stop two-color background (§10.4 reading). */
+.hd-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 44px;
+  margin-top: var(--space-8);
+}
+
+.hd-slider__label {
+  flex-shrink: 0;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  letter-spacing: var(--track-subhead);
+  color: var(--color-text-secondary);
+}
+
+.hd-slider__input {
+  flex: 1;
+  height: 44px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hd-slider__input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0%,
+    var(--color-accent) var(--hd-fill, 0%),
+    var(--color-fill-pressed) var(--hd-fill, 0%),
+    var(--color-fill-pressed) 100%
+  );
+}
+
+.hd-slider__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px; /* center the 20px thumb on the 4px track */
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+
+.hd-slider__input::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-fill-pressed);
+}
+
+.hd-slider__input::-moz-range-progress {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+
+.hd-slider__input::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+
+.hd-slider__value {
+  flex-shrink: 0;
+  min-width: 2.5em;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  color: var(--color-text);
+}
+
+/* §11.3.5 captions inside the converter surfaces. */
+.hd-copy {
+  margin: var(--space-8) 0 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  color: var(--color-text-secondary);
+}
+
+.hd-copy--muted {
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  letter-spacing: var(--track-caption-1);
+  color: var(--color-text-muted);
+}
+
+.hd-panel__apply {
+  width: 100%;
+  margin-top: var(--space-16);
+}
+
+/* Done / failed line under the apply button. */
+.hd-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: var(--space-8) 0 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  color: var(--color-text);
+}
+
+.hd-status__retry {
+  min-height: 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+}
+
+/* §11.3.4 batch converter dialog: same card composition as the §11.5
+   dialogs (white card over the scrim; mobile rise+fade, desktop fade +
+   scale 0.98→1 — the §4.6 modal entrance, reused keyframes). */
+.hd-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-scrim);
+  animation: detail-fade var(--duration-slow) var(--ease-standard);
+  padding: var(--space-16);
+}
+
+.hd-dialog__panel {
+  width: min(400px, 100%);
+  max-height: calc(100svh - 32px);
+  overflow-y: auto;
+  padding: var(--space-20);
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-floating);
+  outline: none;
+  color: var(--color-text);
+  animation: sheet-rise var(--duration-slow) var(--ease-standard);
+}
+
+@media (min-width: 768px) {
+  .hd-dialog__panel {
+    animation-name: modal-pop;
+  }
+}
+
+.hd-dialog__title {
+  margin: 0;
+  font-size: var(--text-title-3);
+  line-height: var(--line-title-3);
+  letter-spacing: var(--track-title-3);
+  font-weight: 600;
+}
+
+.hd-dialog__lede {
+  margin: var(--space-8) 0 0;
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  letter-spacing: var(--track-subhead);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.hd-dialog__body .hd-slider {
+  margin-top: var(--space-12);
+}
+
+.hd-dialog__apply {
+  width: 100%;
+  margin-top: var(--space-16);
+}
+
+.hd-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+}
+
+/* §11.3.4 batch progress: the analysis pattern — determinate bar moved
+   with scaleX only (§6.1), label + current filename. */
+.hd-progress__label {
+  margin: 0;
+  font-size: var(--text-footnote);
+  line-height: var(--line-footnote);
+  letter-spacing: var(--track-footnote);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.hd-progress__bar {
+  height: 4px;
+  margin-top: var(--space-12);
+  border-radius: var(--radius-full);
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.hd-progress__fill {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-standard) var(--ease-standard);
+}
+
+.hd-progress__name {
+  margin: var(--space-8) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* --------------------------------------------------------------------------
    Responsive system (§7.2, §7.3). Mobile-first, 375px design base.
    -------------------------------------------------------------------------- */
@@ -1327,25 +1682,6 @@ img {
 
   .gallery-toolbar {
     max-width: 1200px;
-  }
-
-  /* Pointer-device control sizes (§7.3, §8.1): 32px min-height with
-     generous spacing. The hero CTA keeps its 48px height. */
-  .btn-primary,
-  .btn-secondary {
-    min-height: 36px;
-  }
-
-  .gallery-toolbar .btn-text,
-  .notice__summary {
-    min-height: 32px;
-  }
-
-  /* Phase 4 results (§7.3): band toggles and tile meta buttons get the
-     pointer-device size; the action bar becomes a floating dock row. */
-  .band__toggle,
-  .tile__meta-btn {
-    min-height: 32px;
   }
 
   .results {
@@ -1387,9 +1723,14 @@ img {
   }
 
   /* Desktop title bar: filename left, then Select, then Done (§9d wireframe)
-     — the same DOM reordered with flex order. */
-  .detail__filename {
+     — the same DOM reordered with flex order. The size caption follows its
+     filename inside the same wrapper. */
+  .detail__name-wrap {
     order: 1;
+    text-align: left;
+  }
+
+  .detail__filename {
     text-align: left;
   }
 
@@ -1405,8 +1746,10 @@ img {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    /* 44×44 base (§6): coarse pointers keep this at every width; the
+       fine-pointer density block below shrinks it to 36×36. */
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
     padding: 0;
     border: 0;
@@ -1449,6 +1792,207 @@ img {
   }
 }
 
+/* --------------------------------------------------------------------------
+   Phase R6 — §11.5 session delete + recommendations
+   -------------------------------------------------------------------------- */
+
+/* §11.5.5 per-tile "Suggested" badge: text-only pill on every Blurry tile,
+   top-LEFT (the selection checkmark owns the top-right). aria-hidden
+   decoration — the tile button's accessible name carries the fact. */
+.tile__suggested {
+  position: absolute;
+  top: var(--space-8);
+  left: var(--space-8);
+  padding: 2px var(--space-8);
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-2);
+  line-height: var(--line-caption-2);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* §11.5.2 per-tile "Delete": third meta row under every tile, right-
+   aligned, NEUTRAL (not red, not accent — the danger lives in the dialog). */
+.tile__delete-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tile__delete {
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+/* §11.5.2 detail "Delete": the ONE red control outside the dialog — the
+   stage band token (5.23:1 on --color-stage; the white-surface red would
+   be ≈2.75:1 here). Focus ring follows the existing stage rule
+   (.detail :focus-visible → --color-stage-text). */
+.detail__delete {
+  color: var(--color-band-blurry-stage);
+}
+
+/* §11.5.3 the confirmation dialog: compact white card over the scrim,
+   max-width 400px on BOTH breakpoints (mobile floats as a card with 16px
+   margins — never a full-screen sheet). Stacks OVER the detail modal
+   (§11.5.3 rule 6): z-index 60 > the detail's 50. */
+.confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--space-16);
+  background: var(--color-scrim);
+}
+
+.confirm__panel {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-floating);
+  padding: var(--space-20);
+  animation: confirm-in var(--duration-slow) var(--ease-standard);
+}
+
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes confirm-in-desktop {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.confirm__title {
+  margin: 0 0 var(--space-12);
+  font-size: var(--text-title-3);
+  line-height: var(--line-title-3);
+  letter-spacing: var(--track-title-3);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.confirm__text {
+  margin: 0 0 var(--space-12);
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  color: var(--color-text-secondary);
+}
+
+.confirm__filename {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-1);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* §9e disclosure pattern: collapsed by default, per-dialog state. */
+.confirm__details {
+  margin: 0 0 var(--space-12);
+}
+
+.confirm__summary {
+  cursor: pointer;
+  font-size: var(--text-footnote);
+  color: var(--color-text-secondary);
+}
+
+.confirm__list {
+  margin: var(--space-8) 0 0;
+  padding-left: var(--space-16);
+  list-style: none;
+}
+
+.confirm__list-item {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  margin-top: var(--space-16);
+}
+
+/* §11.5.3 destructive confirm: red TEXT on the white card (HIG: never the
+   primary/accent role), inheriting every .btn-text state (§5 one-token
+   rule). Zero new hex — --color-band-blurry-text, §4.9 pair 20: 6.52:1. */
+.btn-delete {
+  color: var(--color-band-blurry-text);
+}
+
+/* §4.6 modal entrance desktop variant: fade + scale 0.98→1 (mobile rises). */
+@media (min-width: 768px) {
+  .confirm__panel {
+    animation-name: confirm-in-desktop;
+  }
+}
+
+/* Pointer-device density (§7.3, as amended by design-spec-v2 §6): the 32/36px
+   sizes apply ONLY when the pointer is fine. A coarse pointer (tablet) keeps
+   the 44px base values at every viewport width — no coarse override exists,
+   because the base rules already carry 44px everywhere. */
+@media (min-width: 768px) and (pointer: fine) {
+  /* Hero CTA excluded (design-spec-v2 §6): the hero keeps its 48px height at
+     every breakpoint, so .btn-hero must not match this density rule — the
+     block sits at the end of the file and would otherwise override it. */
+  .btn-primary:not(.btn-hero),
+  .btn-secondary {
+    min-height: 36px;
+  }
+
+  /* The one size modifier (design-spec-v2 §5): markup adds btn-text--compact
+     where the 32px pointer density applies (toolbar "Add more", the notice
+     summary). Never applied on coarse pointers — the .btn-text base holds. */
+  .btn-text--compact {
+    min-height: 32px;
+  }
+
+  .band__toggle,
+  .tile__meta-btn {
+    min-height: 32px;
+  }
+
+  /* §11.5.2: per-tile Delete follows the band__toggle density precedent;
+     the detail and dialog Delete buttons follow button metrics (36px). */
+  .tile__delete {
+    min-height: 32px;
+  }
+
+  .detail__delete,
+  .confirm__actions .btn-delete {
+    min-height: 36px;
+  }
+
+  .detail__nav {
+    width: 36px;
+    height: 36px;
+  }
+}
+
 @media (min-width: 1024px) {
   .photo-grid { grid-template-columns: repeat(8, 1fr); }
 }
@@ -1484,5 +2028,21 @@ img {
   .band--reveal .tile,
   .detail__panel {
     animation: none !important;
+  }
+
+  /* §11.5.3: the confirm dialog's entrance collapses too (the dialog must
+     never animate under reduced motion — the removal itself is instant
+     per §11.5.1). */
+  .confirm__panel {
+    animation: none !important;
+  }
+
+  /* §11.4/§11.6.6: the resolution number-slide collapses to an instant,
+     crossfade-free text swap. The HDPanelView JS also short-circuits the
+     slide under reduced motion (no transform is ever applied); this rule
+     is the CSS-side guarantee that even a racing input event cannot run a
+     visible 1ms slide. */
+  .hd-readout__line {
+    transition: none !important;
   }
 }

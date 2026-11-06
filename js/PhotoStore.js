@@ -123,6 +123,25 @@ export class PhotoStore {
     }
     this.#photos = [];
   }
+
+  /**
+   * §11.5.4 confirmed session delete: remove records by id, revoking their
+   * thumbnail object URLs (the clear() pattern scoped to the removed
+   * records). Returns the removed records in store order so the caller can
+   * announce and compute the focus fallback; unknown ids are ignored.
+   */
+  remove(ids) {
+    const idSet = new Set(ids);
+    const removed = this.#photos.filter((photo) => idSet.has(photo.id));
+    if (removed.length === 0) {
+      return [];
+    }
+    for (const photo of removed) {
+      URL.revokeObjectURL(photo.thumbURL);
+    }
+    this.#photos = this.#photos.filter((photo) => !idSet.has(photo.id));
+    return removed;
+  }
 }
 
 /* --------------------------------------------------------------------------

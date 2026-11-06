@@ -12,7 +12,9 @@
  * Phase 2 + designs/design-spec.md §9a/§9e):
  *   S1  empty state — CTA visible, no stray actions; folder-pick control
  *       feature-gated (§11): absent from the DOM when no folder API exists
- *   S2  1 photo picked — tile filename + size correct, count updates
+ *   S2  1 photo picked — tile filename + "96% sharp" chip (R4 re-scope
+ *       2026-11-06: design-spec-v2 §11.2 layout consequence moved the tile's
+ *       file-size caption to the detail view — §11.5, Phase R6), count updates
  *   S3  20+ photos (24) — every thumbnail renders, count correct
  *   S4  drag-drop — synthetic DataTransfer drop adds photos (desktop)
  *   S5  invalid file (.txt) — visible counted notice, excluded from gallery
@@ -25,14 +27,18 @@
  *   S10 console/network hygiene — zero console errors/warnings, pageerrors,
  *       failed requests, HTTP >= 400 in every state
  *   S11 contrast regression lock (F-1 fix; re-scoped for the Phase 4 §9c
- *       results screen) — "Start over" keeps the F-1 lock: computed color
- *       rgb(15,76,189) (--color-accent-text) and >= 4.5:1 at rest and scrolled
- *       over dark content. The "Add more" the F-1 fix originally locked was
- *       the PENDING-GRID text button; after analysis completes the app now
- *       shows the §9c results action bar, where "Add more" is the §8.1
- *       secondary button whose label is --color-text (rgb(0,0,0), buttons
- *       table row "Secondary"), so the lock asserts that value + >= 4.5:1 on
- *       the results bar instead. Re-run + re-locked 2026-11-05 (Phase 4 e2e).
+ *       results screen and again for the v2 restyle, 2026-11-06) — "Start over"
+ *       keeps the F-1 lock on the v2 single accent: computed color
+ *       rgb(46,92,149) (--color-accent #2E5C95, design-spec-v2 §4.2/§4.7;
+ *       the v1 rescue token --color-accent-text is retired per §4.8) and
+ *       >= 4.5:1 at rest and scrolled over dark content. The "Add more" the
+ *       F-1 fix originally locked was the PENDING-GRID text button; after
+ *       analysis completes the app now shows the §9c results action bar,
+ *       where "Add more" is the §8.1 secondary button whose label is
+ *       --color-text — v2 value rgb(22,25,30) (#16191E, design-spec-v2
+ *       §4.1/§4.7) — so the lock asserts that value + >= 4.5:1 on the results
+ *       bar instead. Re-run + re-locked 2026-11-05 (Phase 4 e2e) and
+ *       2026-11-06 (R3 v2 re-scope).
  *   S12 responsiveness — delegated states at the 375 px mobile base: CTA and
  *       gallery visible, no horizontal overflow
  *
@@ -64,13 +70,16 @@ const WATCHDOG_MS = 240000;   // whole run hard cap
 const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
 const MOBILE_VIEWPORT = { width: 375, height: 812 };
 
-const ACCENT_TEXT_STR = "rgb(15, 76, 189)"; // --color-accent-text (fix F-1)
-const ACCENT_TEXT_RGB = [15, 76, 189];
-// §8.1 secondary button label (design-spec §8.1 "Buttons" table: Secondary =
-// --color-surface-muted fill + --color-text label) — the results-screen
+// v2 restyle re-scope (design-spec-v2 §4.2/§4.7): the F-1 accent lock now
+// asserts the single v2 accent #2E5C95 (rgb 46,92,149); its v1 rescue token
+// --color-accent-text (#0F4CBD) is retired with no successor (§4.8).
+const ACCENT_TEXT_STR = "rgb(46, 92, 149)"; // --color-accent #2E5C95 (v2)
+const ACCENT_TEXT_RGB = [46, 92, 149];
+// §8.1 secondary button label (design-spec-v2 §4.1/§4.7 "Buttons": Secondary =
+// --color-surface-muted fill + --color-text #16191E label) — the results-screen
 // "Add more" after the Phase 4 §9c transition.
-const SECONDARY_TEXT_STR = "rgb(0, 0, 0)";
-const SECONDARY_TEXT_RGB = [0, 0, 0];
+const SECONDARY_TEXT_STR = "rgb(22, 25, 30)"; // --color-text #16191E (v2)
+const SECONDARY_TEXT_RGB = [22, 25, 30];
 const ALL_FAILED_MSG = "Couldn't open those files. Nothing was added."; // F-2 fix copy
 const STALE_MSG = "Gallery cleared."; // the stale message the F-2 defect showed
 const FAILED_BODY =
@@ -290,32 +299,42 @@ async function pixelBackdrop(page, locator) {
     clip: { x: box.x, y: box.y, width: box.width, height: box.height },
     timeout: 10000,
   });
-  return page.evaluate(async (dataUrl) => {
-    const img = new Image();
-    img.src = dataUrl;
-    await img.decode();
-    const c = document.createElement("canvas");
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-    const ctx = c.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    const { data } = ctx.getImageData(0, 0, c.width, c.height);
-    const counts = new Map();
-    for (let i = 0; i < data.length; i += 4) {
-      const key = `${data[i] >> 3},${data[i + 1] >> 3},${data[i + 2] >> 3}`;
-      counts.set(key, (counts.get(key) || 0) + 1);
-    }
-    let modeKey = null;
-    let modeCount = 0;
-    for (const [k, n] of counts) {
-      if (n > modeCount) {
-        modeCount = n;
-        modeKey = k;
+  /* CSP note (R2 INF-2, index.html:36): the shipped policy is
+     img-src 'self' blob: — a data: URL image is blocked. The screenshot is
+     therefore loaded through a blob: object URL; the pixel math and every
+     assertion on modeBg are unchanged. */
+  return page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+    try {
+      const img = new Image();
+      img.src = blobUrl;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const { data } = ctx.getImageData(0, 0, c.width, c.height);
+      const counts = new Map();
+      for (let i = 0; i < data.length; i += 4) {
+        const key = `${data[i] >> 3},${data[i + 1] >> 3},${data[i + 2] >> 3}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
       }
+      let modeKey = null;
+      let modeCount = 0;
+      for (const [k, n] of counts) {
+        if (n > modeCount) {
+          modeCount = n;
+          modeKey = k;
+        }
+      }
+      const [r, g, b] = modeKey.split(",").map((v) => (+v << 3) + 4);
+      return { modeBg: [r, g, b], pixels: data.length / 4, distinct: counts.size };
+    } finally {
+      URL.revokeObjectURL(blobUrl);
     }
-    const [r, g, b] = modeKey.split(",").map((v) => (+v << 3) + 4);
-    return { modeBg: [r, g, b], pixels: data.length / 4, distinct: counts.size };
-  }, `data:image/png;base64,${buf.toString("base64")}`);
+  }, buf.toString("base64"));
 }
 
 const REVOKE_SPY = () => {
@@ -560,7 +579,7 @@ async function runState(id, name, fn) {
 
     /* ---------------- S2 — 1 photo via the real CTA path ---------------- */
 
-    await runState("S2", "1 photo picked: filename + size correct, count updates", async ({ page }) => {
+    await runState("S2", "1 photo picked: filename + \"96% sharp\" chip (R4 §11.2), count updates", async ({ page }) => {
       await page.goto(appUrl, { waitUntil: "load", timeout: STEP_TIMEOUT });
 
       // Act like a user: click "Choose photos", feed the owning file chooser.
@@ -580,20 +599,30 @@ async function runState(id, name, fn) {
         `gallery shows ${JSON.stringify(names)} instead of the single expected tile`,
       );
 
-      const text = await tileText(page, FIX.sharpText.name);
-      const sizeMatch = /(\d+(?:\.\d+)?) (B|KB|MB|GB)/.exec(text);
-      assert(sizeMatch, `no file size shown in the tile (tile text: ${JSON.stringify(text)})`);
-      const { bytes, tolerance } = parseDisplayedSize(sizeMatch);
-      const expectedBytes = FIX.sharpText.buffer.length;
+      /* R4 re-scope (2026-11-06): design-spec-v2 §11.2 layout consequence —
+         the tile's file-size caption yields its slot to the wider "NN% sharp"
+         chip and moves to the detail view (§11.5, Phase R6). The old "N KB/MB"
+         tile assertion is dropped with that citation; the same tile element is
+         asserted on its NEW text instead: the R4 percentage chip, identity-
+         mapped from the store score (96 → "96% sharp"). */
+      await page.waitForFunction(
+        () => {
+          const num = document.querySelector(".photo-grid .tile .chip__num");
+          return !!num && /^\d+% sharp$/.test(num.textContent.trim());
+        },
+        null,
+        { timeout: STEP_TIMEOUT, polling: 25 },
+      );
+      const chipText = (await page.locator(".photo-grid .tile .chip__num").first().innerText()).trim();
       assert(
-        Math.abs(bytes - expectedBytes) <= tolerance,
-        `displayed size "${sizeMatch[0]}" (${Math.round(bytes)} B) does not match ${expectedBytes} B (tolerance ${Math.round(tolerance)})`,
+        chipText === "96% sharp",
+        `tile chip "${chipText}", expected "96% sharp" for the fixture's locked score (R4 §11.2 identity mapping)`,
       );
 
       // State change: Start over appears once photos exist (pairs with S1).
       await expectVisible(page.getByRole("button", { name: "Start over" }), "Start over after selection");
       await shot(page, "02-single-photo.png");
-      return `tile "${FIX.sharpText.name}" shows "${sizeMatch[0]}" for ${expectedBytes} B; count "1 photo"`;
+      return `tile "${FIX.sharpText.name}" chip "${chipText}" (R4 §11.2; size caption now detail-only per §11.2/§11.5); count "1 photo"`;
     });
 
     /* ---------------- S3 — 24 photos ---------------- */
@@ -630,12 +659,15 @@ async function runState(id, name, fn) {
       const dt = await armDrop(page, dropFiles);
       await page
         .waitForFunction(
-          () => getComputedStyle(document.querySelector("main")).backgroundColor === "rgba(0, 136, 255, 0.1)",
+          /* v2 re-scope (design-spec-v2 §4.2/§4.8): drag-over fill is
+             --color-accent-subtle rgba(46,92,149,0.10); v1's literal was
+             rgba(0,136,255,0.10). */
+          () => getComputedStyle(document.querySelector("main")).backgroundColor === "rgba(46, 92, 149, 0.1)",
           null,
           { timeout: STEP_TIMEOUT, polling: 60 },
         )
         .catch(() => {
-          throw new Error("dragover feedback: drop zone did not tint (expected rgba(0,136,255,0.1))");
+          throw new Error("dragover feedback: drop zone did not tint (expected rgba(46,92,149,0.1) — v2 --color-accent-subtle, §4.2)");
         });
       await shot(page, "04a-dragover-feedback.png");
 
@@ -852,7 +884,7 @@ async function runState(id, name, fn) {
 
     /* ---------------- S11 — contrast regression lock (F-1) ---------------- */
 
-    await runState("S11", "Contrast lock: Start over accent-text + Add more §8.1 secondary, >=4.5:1 at rest + scrolled", async ({ page, context }) => {
+    await runState("S11", "Contrast lock: Start over v2 accent #2E5C95 + Add more §8.1 secondary, >=4.5:1 at rest + scrolled", async ({ page, context }) => {
       await context.addInitScript(INSTALL_SAMPLE);
       await page.goto(appUrl, { waitUntil: "load", timeout: STEP_TIMEOUT });
       await page.setInputFiles("#file-input", [asInput(FIX.sharpText), asInput(FIX.checker)], { timeout: STEP_TIMEOUT });
@@ -873,8 +905,9 @@ async function runState(id, name, fn) {
       // At rest — computed color + composited backdrop (analytic).
       const addRest = await sampleEl(addMore);
       const soRest = await sampleEl(startOver);
-      // Phase 4 re-scope: "Add more" on results is the §8.1 secondary button
-      // (--color-text); "Start over" keeps the F-1 accent-text lock.
+      // Phase 4 + v2 re-scope: "Add more" on results is the §8.1 secondary
+      // button (--color-text #16191E); "Start over" carries the F-1 lock on
+      // the v2 single accent #2E5C95 (design-spec-v2 §4.2/§4.7).
       assert(addRest.fgRaw === SECONDARY_TEXT_STR, `"Add more" color is ${addRest.fgRaw}, expected ${SECONDARY_TEXT_STR} (§8.1 secondary)`);
       assert(soRest.fgRaw === ACCENT_TEXT_STR, `"Start over" color is ${soRest.fgRaw}, expected ${ACCENT_TEXT_STR}`);
       const addRestRatio = contrastRatio(addRest.fg, addRest.bg);
@@ -912,7 +945,31 @@ async function runState(id, name, fn) {
       await expectText(page, "0 selected · 50 total", "results action-bar summary before scroll");
       await waitForGridImages(page, 50);
 
-      await page.evaluate(() => window.scrollTo(0, document.scrollingElement.scrollHeight));
+      // R6 re-scope (2026-11-06, design-spec-v2 §11.5.2): tiles now carry a
+      // third meta row (per-tile Delete), so the page BOTTOM is light meta —
+      // scrolling to scrollHeight puts the light delete rows under the
+      // header instead of the dark photos. Scroll the last dark PHOTO under
+      // the sticky header explicitly — the lock's intent is dark content
+      // behind the translucent header.
+      await page.evaluate(() => {
+        // Pick the photo horizontally aligned with the "Start over" button —
+        // the pixel sample reads what is behind THAT button, so the dark
+        // tile must sit in the same column, then scroll its dark middle
+        // under the translucent header.
+        const btn = document.getElementById("start-over-btn");
+        const photos = [...document.querySelectorAll(".tile__photo")];
+        const br = btn.getBoundingClientRect();
+        const btnX = (br.left + br.right) / 2;
+        const target = photos
+          .map((p) => ({ p, r: p.getBoundingClientRect() }))
+          .filter(({ r }) => r.width > 0)
+          .sort(
+            (a, b) =>
+              Math.abs((a.r.left + a.r.right) / 2 - btnX) -
+              Math.abs((b.r.left + b.r.right) / 2 - btnX),
+          )[0];
+        window.scrollTo(0, window.scrollY + target.r.top + target.r.height / 2 - 24);
+      });
       await page.waitForFunction(() => window.scrollY > 100, null, { timeout: STEP_TIMEOUT, polling: 100 });
       await expectVisible(startOver, "Start over while scrolled (sticky header)");
 
@@ -927,7 +984,7 @@ async function runState(id, name, fn) {
       const soPxRatio = contrastRatio(ACCENT_TEXT_RGB, soPx.modeBg);
       assert(soPxRatio >= 4.5, `"Start over" rendered backdrop rgb(${soPx.modeBg}): ${soPxRatio.toFixed(2)}:1 < 4.5:1`);
 
-      // "Add more" surface never varies with scroll (#F2F2F7, constant);
+      // "Add more" surface never varies with scroll (#EEF1F4 v2 surface-muted, constant);
       // Phase 4 re-scope: label is --color-text (§8.1 secondary).
       const addScrolled = await sampleEl(addMore);
       assert(addScrolled.fgRaw === SECONDARY_TEXT_STR, `"Add more" scrolled color is ${addScrolled.fgRaw}, expected ${SECONDARY_TEXT_STR}`);

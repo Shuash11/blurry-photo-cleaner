@@ -20,7 +20,7 @@
         <tr><th scope="row">Project name</th><td>Blurry Photo Cleaner</td></tr>
         <tr><th scope="row">Your name</th><td>[Your name]</td></tr>
         <tr><th scope="row">Course</th><td>Multimedia</td></tr>
-        <tr><th scope="row">Date</th><td>November 5, 2026</td></tr>
+        <tr><th scope="row">Date</th><td>November 6, 2026</td></tr>
       </tbody>
     </table>
     <p class="title-note">The report has five parts: title page, introduction, how it works, testing, and conclusion.</p>
@@ -56,14 +56,14 @@
       <tbody>
         <tr>
           <td>Selected photo files &mdash; picked with the file picker, dragged onto the page, or chosen from a folder (when the browser supports it). The files stay on the device.</td>
-          <td>Each photo is analyzed in a background Web Worker: decode upright, downscale to a 256-pixel working image, convert to grayscale, measure Laplacian variance (edge energy), and normalize the result to a 0&ndash;100 sharpness score. The score is cut into three bands: under 40 Blurry, 40&ndash;59 Needs review, 60+ Sharp.</td>
-          <td>A review grid grouped into the three bands, with counts and a score chip on every tile. The user selects photos, downloads the selected originals, and deletes those files in the phone&rsquo;s gallery app.</td>
+          <td>Each photo is analyzed in a background Web Worker: decode upright, downscale to a 256-pixel working image, convert to grayscale, measure Laplacian variance (edge energy), and normalize the result to a 0&ndash;100 sharpness score. The score is cut into three bands &mdash; under 40 Blurry, 40&ndash;59 Needs review, 60+ Sharp &mdash; and shown as &ldquo;NN% sharp&rdquo; on every tile. Blurry photos are also marked <em>Suggested</em> for deletion. On request, a second worker resamples a photo to a larger size (HD copy, download only); nothing is re-scored.</td>
+          <td>A review grid grouped into the three bands, with counts and an &ldquo;NN% sharp&rdquo; chip on every tile. The user selects photos (one tap selects all suggested ones), downloads the selected originals or HD copies, and removes photos from the review session after a confirmation dialog &mdash; then deletes those files in the phone&rsquo;s gallery app.</td>
         </tr>
       </tbody>
     </table>
 
     <figure class="fig-diagram">
-      <img src="assets/figure1-system-flow.svg" alt="System flow diagram: selected photo files are decoded upright, downscaled to 256 pixels, converted to grayscale, scored with Laplacian variance, normalized to 0–100, and grouped into three bands; the output is a grouped review grid with downloads.">
+      <img src="assets/figure1-system-flow.svg" alt="System flow diagram: selected photo files are decoded upright, downscaled to 256 pixels, converted to grayscale, scored with Laplacian variance, normalized to 0–100, and grouped into three bands; the output is a grouped review grid with NN% sharp scores, from which the user downloads originals or HD copies and removes recommended photos from the session.">
       <figcaption><span class="fig-label">Figure 1.</span> System flow</figcaption>
     </figure>
 
@@ -79,19 +79,19 @@
       <figcaption><span class="fig-label">Figure 3.</span> Analyzing photos: progress card over the pending grid (phone view).</figcaption>
     </figure>
 
-    <figure class="figure--tall">
-      <img src="assets/screenshot-3-results.png" alt="Grouped results: a Blurry band with twelve photos scored 34–36, an empty Needs review band, and a Sharp band with twelve photos scored 96–100; two undecodable files are listed in a notice.">
-      <figcaption><span class="fig-label">Figure 4.</span> Results grouped into bands, with a score on every tile. Files the browser cannot decode are counted in a notice, never dropped silently.</figcaption>
+    <figure>
+      <img src="assets/screenshot-3-results.png" alt="Grouped results on the grey theme: a Blurry band with Suggested badges and 34–36% sharp chips, an empty Needs review band, and a Sharp band with 96–100% sharp chips.">
+      <figcaption><span class="fig-label">Figure 4.</span> Results grouped into bands, with an &ldquo;NN% sharp&rdquo; chip on every tile and a <em>Suggested</em> mark on the blurry ones. Files the browser cannot decode are counted in a notice, never dropped silently.</figcaption>
     </figure>
 
     <figure>
-      <img src="assets/screenshot-4-selected.png" alt="Two blurry photos selected with blue rings and checkmarks; the action bar reads 2 selected · 24 total with Download selected enabled.">
-      <figcaption><span class="fig-label">Figure 5.</span> Selecting the photos to save &mdash; the action bar counts the selection and enables Download selected.</figcaption>
+      <img src="assets/screenshot-4-hd-converter.png" alt="Detail view of one photo with the HD converter panel open: a size slider at 2× and a readout showing the original 480 × 480 resolution sliding to the new 960 × 960 resolution.">
+      <figcaption><span class="fig-label">Figure 5.</span> The HD converter: the slider enlarges the photo and the readout slides from the old resolution to the new one. The copy is honest &mdash; enlarged, same captured detail; the copy saves as a download and is never re-scored.</figcaption>
     </figure>
 
-    <figure>
-      <img src="assets/screenshot-5-detail.png" alt="Detail view of one photo: full-size image on a dark stage, score chip 36 · Blurry, and a Download this photo button.">
-      <figcaption><span class="fig-label">Figure 6.</span> Detail view of one photo, with its score and band.</figcaption>
+    <figure class="figure--portrait">
+      <img src="assets/screenshot-5-delete.png" alt="Delete confirmation dialog on a phone: Delete 1 photo from this session? with the filename, a Cancel button, and a red Delete button.">
+      <figcaption><span class="fig-label">Figure 6.</span> Every removal goes through a confirmation dialog that names the exact count and restates the device reality; Cancel is the default. Blurry photos are pre-labelled <em>Suggested</em>, and one tap selects all of them.</figcaption>
     </figure>
   </section>
 
@@ -129,24 +129,24 @@
           <td class="col-pass">Pass</td>
         </tr>
         <tr>
-          <th scope="row">Test 2<br><span class="row-sub">Blur detection</span></th>
-          <td>Scored 2 sharp test patterns and 2 deliberately blurred copies of the same patterns; re-ran the same 4 files a second time.</td>
-          <td>Sharp patterns score high and land in Sharp; blurred copies score low and land in Blurry; the same file always gets the same score.</td>
-          <td>Sharp checkerboard 100 &rarr; Sharp, sharp text 96 &rarr; Sharp, blurred checkerboard 34 &rarr; Blurry, blurred text 36 &rarr; Blurry; every re-run gave identical scores and bands.</td>
+          <th scope="row">Test 2<br><span class="row-sub">Blur detection and scores</span></th>
+          <td>Scored 2 sharp test patterns and 2 deliberately blurred copies of the same patterns; re-ran the same 4 files a second time; read the score chips on the tiles.</td>
+          <td>Sharp patterns score high and land in Sharp; blurred copies score low and land in Blurry; the same file always gets the same score; every tile shows its score as a percentage.</td>
+          <td>Sharp checkerboard 100 &rarr; Sharp, sharp text 96 &rarr; Sharp, blurred checkerboard 34 &rarr; Blurry, blurred text 36 &rarr; Blurry; every re-run gave identical scores and bands; the chips read &ldquo;100% sharp&rdquo; &hellip; &ldquo;34% sharp&rdquo; and matched the stored scores exactly, with one line explaining that percentages are based on detected sharpness.</td>
           <td class="col-pass">Pass</td>
         </tr>
         <tr>
-          <th scope="row">Test 3<br><span class="row-sub">Grouping and review</span></th>
-          <td>Analyzed batches of 4 and 24 photos and reviewed the grid: band order, counts, Select all, tapping tiles to select.</td>
-          <td>Photos are grouped Blurry &rarr; Needs review &rarr; Sharp with counts matching the tiles; selecting updates the count in the action bar.</td>
-          <td>Bands rendered in that order with counts equal to the tiles (4-photo batch: 2 Blurry, 0 Needs review, 2 Sharp; 24-photo batch: 12 and 12, Figure 4); the empty middle band showed &ldquo;No photos in this band&rdquo;; the summary read &ldquo;2 selected &middot; 24 total&rdquo; and survived scrolling and re-rendering.</td>
+          <th scope="row">Test 3<br><span class="row-sub">Grouping, review, and delete</span></th>
+          <td>Analyzed batches of 4 and 24 photos and reviewed the grid: band order, counts, the Suggested marks on blurry photos, &ldquo;Select all recommended&rdquo;, tapping tiles to select, and deleting photos through the confirmation dialog (Cancel first, then Delete).</td>
+          <td>Photos are grouped Blurry &rarr; Needs review &rarr; Sharp with counts matching the tiles; blurry photos carry a Suggested mark and one tap selects all of them; every removal asks for confirmation first, names the exact count, and Cancel changes nothing.</td>
+          <td>Bands rendered in that order with counts equal to the tiles; the empty middle band showed &ldquo;No photos in this band&rdquo;; the summary read &ldquo;2 selected &middot; 24 total&rdquo; and survived scrolling and re-rendering. Cancel and Escape closed the dialog with nothing deleted; confirming removed exactly the named photos, updated the counts, and announced the removal; the last removal returned the app to the upload screen.</td>
           <td class="col-pass">Pass</td>
         </tr>
         <tr>
-          <th scope="row">Test 4<br><span class="row-sub">Download</span></th>
-          <td>Selected 2 photos and pressed Download selected; also pressed it with nothing selected.</td>
-          <td>Each selected photo is saved as the original file; with 0 selected the button is disabled.</td>
-          <td>2 files saved byte-identical to the originals, one after another 344 ms apart; the button was disabled at 0 selected; the app announced &ldquo;Preparing 2 photos&rdquo; and then &ldquo;Saved 2 photos&rdquo;.</td>
+          <th scope="row">Test 4<br><span class="row-sub">Download and HD copies</span></th>
+          <td>Selected 2 photos and pressed Download selected; pressed it with nothing selected; then opened a photo, dragged the HD slider to 2&times; and converted it; converted 2 selected photos as a batch.</td>
+          <td>Each selected photo is saved as the original file; with 0 selected the button is disabled; an HD copy saves at the chosen larger size with an honest label, as a download only.</td>
+          <td>2 files saved byte-identical to the originals, one after another 344 ms apart; the button was disabled at 0 selected; the app announced &ldquo;Preparing 2 photos&rdquo; and then &ldquo;Saved 2 photos&rdquo;. The HD copy saved under the original name plus &ldquo;-hd&rdquo; at exactly double the pixel dimensions, labelled &ldquo;Upscaled &mdash; enlarged, same captured detail&rdquo;, and the review scores stayed untouched; the batch dialog reported &ldquo;2 HD copies saved&rdquo;.</td>
           <td class="col-pass">Pass</td>
         </tr>
         <tr>
@@ -158,16 +158,16 @@
         </tr>
       </tbody>
     </table>
-    <p class="table-note">Sources for the measured numbers (automated end-to-end runs in this repository): Test 1 &mdash; <code>e2e/artifacts/phase6-e2e-tester/reg-phase2-run.log</code>; Test 2 &mdash; <code>reg-phase3-run.log</code>; Test 3 &mdash; <code>reg-phase4-run.log</code> plus the 24-photo final run (<code>e2e/artifacts/phase6-polish/final/</code>, Figure 4); Test 4 &mdash; <code>reg-phase4-run.log</code>, byte-identity re-verified by checksum in <code>e2e/artifacts/phase5-security-findings.md</code>; Test 5 (app side) &mdash; <code>reg-phase3-run.log</code> (20-photo analysis window 2.61 s; 14.36 s wall time including loading the files into the test browser) and <code>run.log</code> (full mobile flow). The manual-way time is an estimate, not a measurement. The app itself does not delete photos: it saves the blurry ones so they can be deleted in the gallery app.</p>
+    <p class="table-note">Sources for the measured numbers (automated end-to-end runs in this repository): Test 1 &mdash; <code>e2e/artifacts/phase6-e2e-tester/reg-phase2-run.log</code>; Test 2 &mdash; <code>reg-phase3-run.log</code> plus the percentage-format runs (<code>e2e/artifacts/v2-r4-e2e/</code>); Test 3 &mdash; <code>reg-phase4-run.log</code> plus the delete-flow runs (<code>e2e/artifacts/v2-r6-smoke/</code>, Figure 6); Test 4 &mdash; <code>reg-phase4-run.log</code>, byte-identity re-verified by checksum in <code>e2e/artifacts/phase5-security-findings.md</code>, HD-copy runs in <code>e2e/artifacts/r5-smoke/</code> (Figure 5); Test 5 (app side) &mdash; <code>reg-phase3-run.log</code> (20-photo analysis window 2.61 s; 14.36 s wall time including loading the files into the test browser) and <code>run.log</code> (full mobile flow). The manual-way time is an estimate, not a measurement. The app never deletes files from the phone: it removes photos from the review session after confirmation and saves the copies to keep, so the files to delete can be found by name in the gallery app.</p>
   </section>
 
   <!-- PART 5 — Conclusion: What works / What does not work / What you would improve (docx part 5) -->
   <section class="part" id="part-5-conclusion">
     <h2>5. Conclusion</h2>
     <ul class="conclusion-list">
-      <li><span class="point-label">What works:</span> uploading 1 to 24+ photos with invalid files counted in a notice instead of dropped silently; sharpness scoring in a background worker that kept the page responsive (20 photos in 2.6 s); the three-band grouping with a score on every tile; downloads that save the original files byte-identical; and the privacy promise &mdash; photos never leave the device, verified by running the whole flow with all outside network requests blocked.</li>
-      <li><span class="point-label">What does not work:</span> the app cannot delete photos from the phone &mdash; the user downloads the blurry ones and deletes those files in the gallery app themselves. iPhone HEIC photos may need converting to JPEG first, because some browsers cannot decode them. And a single sharpness metric can flag sharp-but-low-texture photos (a sky, a plain wall) as blurry &mdash; the Needs review band catches the borderline cases so the user decides, but those photos still need a human eye.</li>
-      <li><span class="point-label">What I would improve:</span> export all selected photos as one ZIP file instead of one download at a time; add adjustable thresholds for advanced users; and make the app installable and fully offline as a PWA.</li>
+      <li><span class="point-label">What works:</span> uploading 1 to 24+ photos with invalid and oversized files counted in a notice instead of dropped silently; sharpness scoring in a background worker that kept the page responsive (20 photos in 2.6 s); the three-band grouping with an &ldquo;NN% sharp&rdquo; percentage on every tile and Suggested marks on the blurry ones; downloads that save the original files byte-identical; HD copies at a chosen larger size with an honest label and an animated old-to-new resolution readout; deletion from the review session behind a confirmation dialog that names the exact count; and the privacy promise &mdash; photos never leave the device, verified by running the whole flow with all outside network requests blocked.</li>
+      <li><span class="point-label">What does not work:</span> the app cannot delete photos from the phone &mdash; it removes them from the review session only, and the user deletes those files in the gallery app themselves. HD copies are resampled enlargements: they add pixels, not captured detail. iPhone HEIC photos may need converting to JPEG first, because some browsers cannot decode them. And a single sharpness metric can flag sharp-but-low-texture photos (a sky, a plain wall) as blurry &mdash; the Needs review band catches the borderline cases so the user decides, but those photos still need a human eye.</li>
+      <li><span class="point-label">What I would improve:</span> export all selected photos as one ZIP file instead of one download at a time; add adjustable thresholds for advanced users; add a real detail-enhancing upscale model instead of plain resampling; and make the app installable and fully offline as a PWA.</li>
     </ul>
   </section>
 

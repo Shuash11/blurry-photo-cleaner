@@ -17,7 +17,7 @@
  * notices follow via setNoticeHost() so §9e cards stay visible in every state.
  */
 
-import { BAND_SKIPPED } from "./Thresholds.js";
+import { BAND_SKIPPED, MAX_BATCH_FILES, MAX_FILE_LABEL, formatPercent } from "./Thresholds.js";
 
 const MAX_LISTED_FILENAMES = 50; // display cap only — the count is always the true total
 // UX F6: "Analyzing N of M" is throttled to at most one polite announcement
@@ -67,7 +67,11 @@ export class UploadView {
      Rendering entry points (called by App)
      ------------------------------------------------------------------ */
 
-  /** §9a empty state; variant "all-failed" is the §9e no-results composition. */
+  /**
+   * §9a empty state. Variants: "all-failed" and "all-failed-oversize" (INF-1)
+   * are the §9e no-results compositions — the latter when size was the only
+   * reason anything failed, so the copy names the limit instead of decode.
+   */
   renderEmpty(variant = "default") {
     this.#mode = "empty";
     this.#toolbarEl = null;
@@ -131,9 +135,10 @@ export class UploadView {
 
   /**
    * Phase 3/4: fill a tile's score chip once its analysis result lands —
-   * number plus band-colored dot/number (§8.1). The chip stays "—" for
-   * photos skipped by analysis (the analysis-skip notice carries that
-   * message); the results grid restyles every chip at render time.
+   * "NN% sharp" (§11.2, via the shared formatPercent helper) plus the
+   * band-colored dot. The chip stays "—" for photos skipped by analysis
+   * (the analysis-skip notice carries that message; a skip has no score,
+   * never "0% sharp"); the results grid restyles every chip at render time.
    */
   setTileScore(recordId, score, band = null) {
     const tile = this.#gridEl?.querySelector(`[data-id="${CSS.escape(String(recordId))}"]`);
@@ -143,7 +148,7 @@ export class UploadView {
     const chip = tile.querySelector(".chip");
     const num = tile.querySelector(".chip__num");
     if (num) {
-      num.textContent = String(score);
+      num.textContent = formatPercent(score);
     }
     if (chip) {
       chip.classList.remove("chip--pending");
@@ -229,7 +234,7 @@ export class UploadView {
   /**
    * §8.2 analysis progress card: surface card, hairline, radius-lg, 16px
    * padding, max-width 560px; heading, tabular status line, 4px determinate
-   * bar (track rgba(0,0,0,0.06), accent fill moved with scaleX — never width).
+   * bar (track --color-track, accent fill moved with scaleX — never width).
    */
   #buildProgressCard() {
     const card = document.createElement("section");
@@ -312,6 +317,41 @@ export class UploadView {
         names,
         noun: "photo",
         dismissKind: "analysis-skip",
+      }),
+    );
+  }
+
+  /**
+   * Oversize-files notice (INF-1): files rejected at intake because they
+   * are over the per-file size cap. Same card pattern as §9e — counted,
+   * named in the disclosure list, honest about the reason. App owns the
+   * ledger; the limit in the copy derives from MAX_FILE_LABEL so it can
+   * never drift from the enforced constant.
+   */
+  showOversizeNotice(names) {
+    this.#showNotice(
+      this.#buildFileListNotice({
+        heading: `${names.length} ${names.length === 1 ? "file" : "files"} ${names.length === 1 ? "was" : "were"} too large — over ${MAX_FILE_LABEL}`,
+        body: `Photos over ${MAX_FILE_LABEL} can't be loaded. They were skipped — nothing was changed.`,
+        names,
+        noun: "file",
+        dismissKind: "oversize",
+      }),
+    );
+  }
+
+  /**
+   * Over-count notice (INF-1): files beyond the per-batch limit were not
+   * added. Same card pattern as §9e; App owns the ledger.
+   */
+  showOverCountNotice(names) {
+    this.#showNotice(
+      this.#buildFileListNotice({
+        heading: `${names.length} ${names.length === 1 ? "file" : "files"} ${names.length === 1 ? "wasn't" : "weren't"} added`,
+        body: `Only the first ${MAX_BATCH_FILES} files can be loaded at once. The rest were skipped — nothing was changed.`,
+        names,
+        noun: "file",
+        dismissKind: "over-count",
       }),
     );
   }
@@ -478,7 +518,8 @@ export class UploadView {
      ------------------------------------------------------------------ */
 
   #buildEmptyState(variant) {
-    const failed = variant === "all-failed";
+    const failed = variant === "all-failed" || variant === "all-failed-oversize";
+    const oversizeOnly = variant === "all-failed-oversize";
     // Re-detected per render: the folder-pick control exists only while the
     // context actually supports it (§11 — absent, never disabled-looking).
     const folderPickMode = this.#detectFolderPick();
@@ -492,14 +533,20 @@ export class UploadView {
 
     const title = document.createElement("h2");
     title.className = "empty-state__title";
-    title.textContent = failed ? "Couldn't open those files" : "Find the blurry photos";
+    title.textContent = oversizeOnly
+      ? "Those files were too large"
+      : failed
+        ? "Couldn't open those files"
+        : "Find the blurry photos";
     section.appendChild(title);
 
     const body = document.createElement("p");
     body.className = "empty-state__body";
-    body.textContent = failed
-      ? "Try JPEG or PNG photos — this browser couldn't decode them. Nothing was changed."
-      : "Choose photos from your library — they stay on this device.";
+    body.textContent = oversizeOnly
+      ? `Try smaller photos — files over ${MAX_FILE_LABEL} can't be loaded. Nothing was changed.`
+      : failed
+        ? "Try JPEG or PNG photos — this browser couldn't decode them. Nothing was changed."
+        : "Choose photos from your library — they stay on this device.";
     section.appendChild(body);
 
     const actions = document.createElement("div");
@@ -547,7 +594,7 @@ export class UploadView {
 
     const addMore = document.createElement("button");
     addMore.type = "button";
-    addMore.className = "btn-text";
+    addMore.className = "btn-text btn-text--compact"; // 32px fine-pointer density (design-spec-v2 §5)
     addMore.textContent = "Add more";
     addMore.addEventListener("click", () => this.openFilePicker());
     toolbar.appendChild(addMore);
@@ -595,11 +642,12 @@ export class UploadView {
     const score = document.createElement("span");
     score.className = "chip__num";
     // Scored records (e.g. re-rendered existing tiles on "Add more") show
-    // their score with band colors right away; everything else is the
-    // pending "—" state (§8.1) until analysis fills it in.
+    // "NN% sharp" with band colors right away (§11.2, shared helper);
+    // everything else is the pending "—" state (§8.1) until analysis fills
+    // it in.
     if (!pending && typeof item.score === "number" && item.band && item.band !== BAND_SKIPPED) {
       chip.classList.add(`chip--${item.band}`);
-      score.textContent = String(item.score);
+      score.textContent = formatPercent(item.score);
     } else {
       chip.classList.add("chip--pending");
       score.textContent = "—";
@@ -607,10 +655,10 @@ export class UploadView {
     chip.append(dot, score);
     meta.appendChild(chip);
 
-    const size = document.createElement("span");
-    size.className = "tile__size";
-    size.textContent = this.#formatBytes(item.size);
-    meta.appendChild(size);
+    // §11.2 layout consequence: the percentage chip is ≈3× wider than the
+    // bare score, so the file-size caption yields its tile slot here too —
+    // every tile carries the same row structure (filename, chip), and the
+    // size surfaces in the detail view per §11.2/§11.5.
 
     tile.appendChild(meta);
     return tile;
@@ -673,7 +721,10 @@ export class UploadView {
     details.className = "notice__details";
 
     const summary = document.createElement("summary");
-    summary.className = "notice__summary";
+    // Joins the .btn-text component (design-spec-v2 §5): the component
+    // supplies type, accent color, and target size; .notice__summary keeps
+    // only its <summary>-specific layout rules in the stylesheet.
+    summary.className = "notice__summary btn-text btn-text--compact";
     summary.textContent = `See the ${names.length} ${names.length === 1 ? noun : `${noun}s`}`;
     details.appendChild(summary);
 
@@ -770,21 +821,6 @@ export class UploadView {
     use.setAttribute("href", `#icon-${name}`);
     svg.appendChild(use);
     return svg;
-  }
-
-  #formatBytes(bytes) {
-    if (!Number.isFinite(bytes) || bytes < 0) {
-      return "";
-    }
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let value = bytes;
-    let unitIndex = 0;
-    while (value >= 1024 && unitIndex < units.length - 1) {
-      value /= 1024;
-      unitIndex += 1;
-    }
-    const digits = value >= 100 || unitIndex === 0 ? 0 : 1;
-    return `${value.toFixed(digits)} ${units[unitIndex]}`;
   }
 }
 

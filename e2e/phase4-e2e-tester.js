@@ -24,9 +24,11 @@
  *       per-band count text == rendered tiles == store band population; empty
  *       band shows "No photos in this band" and no select-all toggle; no
  *       skipped section when no skipped photos.
- *   P3  Score chips (F1/F2): every scored tile's number equals its store score
- *       and its computed color equals the --color-band-*-text token
- *       (#BB1125 / #A34400 / #007029); band chip headings use the same tokens.
+ *   P3  Score chips (F1/F2; R4 re-scope 2026-11-06 — design-spec-v2 §11.2):
+ *       every scored tile's chip reads "NN% sharp", identity-mapped from its
+ *       store score, and its computed color equals the --color-band-*-text
+ *       token (#BB1125 / #A34400 / #007029); band chip headings use the same
+ *       tokens.
  *   P4  Selection: single-tile toggle (aria-pressed + ring + check badge),
  *       band Select all / Deselect, action-bar summary "N selected · M total"
  *       sync; selection survives detail open/close AND a results re-render
@@ -58,9 +60,11 @@
  *       same-origin (client-only app — no backend API by design); 375px zero
  *       horizontal overflow in empty / analyzing / results / detail states.
  *   P11 Phase 2/3 core regression quick pass: empty state; 1-photo upload via
- *       the real picker path (filename + size + "· 1 total"); invalid-file
- *       notice; start-over with object-URL revocation; fixture scoring
- *       determinism across two runs (Phase 3 surface).
+ *       the real picker path (filename + "96% sharp" chip per the R4 re-scope
+ *       2026-11-06 — design-spec-v2 §11.2 layout consequence moved the tile's
+ *       file-size caption to the detail view, §11.5/Phase R6 — plus "· 1
+ *       total"); invalid-file notice; start-over with object-URL revocation;
+ *       fixture scoring determinism across two runs (Phase 3 surface).
  *
  * Flakiness rule: a state may retry at most twice; a state that only passes on
  * a retry is reported as flaky, never silently green.
@@ -700,11 +704,16 @@ async function stateP2({ page }) {
     (await review.getByRole("button", { name: "Select all", exact: true }).count()) === 0,
     "empty band shows a Select all toggle",
   );
-  // Populated bands each carry the select-all affordance.
+  // Populated bands each carry the select-all affordance. R6 re-scope
+  // (2026-11-06, design-spec-v2 §11.5.5): the Blurry band's toggle is
+  // "Select all recommended ({N})" — the band IS the recommended set.
   for (const id of ["blurry", "sharp"]) {
+    const toggle = band(page, id).getByRole("button", {
+      name: id === "blurry" ? /Select all recommended \(\d+\)/ : "Select all",
+    });
     assert(
-      (await band(page, id).getByRole("button", { name: "Select all", exact: true }).count()) === 1,
-      `band ${id} has no "Select all" toggle`,
+      (await toggle.count()) === 1,
+      `band ${id} has no select-all toggle (blurry expects "Select all recommended (N)")`,
     );
   }
   assert(!ids.includes("skipped"), "skipped section rendered although no photo was skipped");
@@ -749,7 +758,8 @@ async function stateP3({ page }) {
     chipColors[id] = color;
   }
 
-  // F2: every scored tile — number == score, number color == band token.
+  // F2: every scored tile — chip "NN% sharp" == store score (R4 §11.2
+  // identity mapping), chip color == band token.
   let checked = 0;
   const evidence = [];
   for (const id of ["blurry", "review", "sharp"]) {
@@ -761,7 +771,7 @@ async function stateP3({ page }) {
       const photo = byName.get(name);
       assert(photo, `tile "${name}" has no matching store photo`);
       const numText = (await tile.locator(".chip__num").innerText()).trim();
-      assert(numText === String(photo.score), `tile "${name}" chip shows "${numText}", expected score ${photo.score}`);
+      assert(numText === `${photo.score}% sharp`, `tile "${name}" chip shows "${numText}", expected "${photo.score}% sharp" (R4 §11.2 identity mapping)`);
       const color = await tile.locator(".chip__num").evaluate((el) => getComputedStyle(el).color);
       assert(
         color === BAND_TOKENS[photo.band].css,
@@ -774,7 +784,7 @@ async function stateP3({ page }) {
   assert(checked === 4, `checked ${checked} scored tiles, expected 4`);
 
   await shot(page, "03-score-chips-token-colors.png");
-  return `band chips ${JSON.stringify(chipColors)} == F1 tokens; 4/4 tile chips number==score and color==F2 token (${evidence.join("; ")})`;
+  return `band chips ${JSON.stringify(chipColors)} == F1 tokens; 4/4 tile chips read "NN% sharp" == store score (R4 §11.2) and color==F2 token (${evidence.join("; ")})`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -826,8 +836,9 @@ async function stateP4({ page }) {
   const deselectToggle = band(page, "sharp").getByRole("button", { name: "Deselect", exact: true });
   assert(await deselectToggle.isVisible(), "band toggle did not flip to Deselect when the band was fully selected");
 
-  // Blurry band select-all adds; Deselect removes.
-  await band(page, "blurry").getByRole("button", { name: "Select all", exact: true }).click();
+  // Blurry band select-all adds; Deselect removes. R6 re-scope: the blurry
+  // toggle reads "Select all recommended (N)" (§11.5.5).
+  await band(page, "blurry").getByRole("button", { name: /Select all recommended \(\d+\)/ }).click();
   assert((await summary()) === "4 selected · 4 total", `summary after blurry Select all "${await summary()}"`);
   await band(page, "blurry").getByRole("button", { name: "Deselect", exact: true }).click();
   assert((await summary()) === "2 selected · 4 total", `summary after blurry Deselect "${await summary()}"`);
@@ -881,7 +892,11 @@ async function stateP5({ page }) {
 
   // Select exactly 2 (one sharp, one blurry); store order decides download order.
   await page.getByRole("button", { name: FIX.sharpText.name, exact: true }).click();
-  await page.getByRole("button", { name: FIX.blurredCheckerboard.name, exact: true }).click();
+  // R6 re-scope: the blurry tile's accessible name carries the §11.5.5
+  // recommendation fact — match either name form.
+  await page
+    .getByRole("button", { name: new RegExp(`^${FIX.blurredCheckerboard.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(, suggested for deletion)?$`) })
+    .click();
   assert((await summary()) === "2 selected · 4 total", `summary at 2 selected "${await summary()}"`);
   assert(!(await downloadBtn().isDisabled()), "Download selected disabled with 2 selected");
 
@@ -1246,10 +1261,12 @@ async function stateP7({ page }) {
     { timeout: STEP_TIMEOUT, polling: 20 },
   );
   // Preserved scores for the two pre-existing tiles (visible right away).
+  // R4 re-scope (2026-11-06, design-spec-v2 §11.2): the preserved score renders
+  // through the shared identity-mapped "NN% sharp" chip text.
   for (const name of [FIX.sharpText.name, FIX.blurredText.name]) {
     const tile = page.getByRole("listitem").filter({ visible: true, hasText: name }).first();
     const chip = (await tile.locator(".chip__num").innerText()).trim();
-    assert(chip === String(scoreBefore.get(name)), `pending tile "${name}" chip "${chip}", expected preserved score ${scoreBefore.get(name)}`);
+    assert(chip === `${scoreBefore.get(name)}% sharp`, `pending tile "${name}" chip "${chip}", expected preserved score "${scoreBefore.get(name)}% sharp" (R4 §11.2)`);
   }
   const pendingShot = "07a-addmore-pending-visible.png";
   await shot(page, pendingShot);
@@ -1470,9 +1487,14 @@ async function stateP11({ page, context }) {
   await waitForResolved(page, 1);
   await waitForResults(page);
   await expectExactText(page, FIX.sharpText.name, "tile filename");
+  /* R4 re-scope (2026-11-06): design-spec-v2 §11.2 layout consequence — the
+     tile's file-size caption yields its slot to the wider "NN% sharp" chip and
+     moves to the detail view (§11.5, Phase R6). The old "N KB/MB" tile
+     assertion is dropped with that citation; the tile is asserted on its NEW
+     text instead: the R4 percentage chip, identity-mapped from the store
+     score (96 → "96% sharp"). */
   const single = await tileText(page, FIX.sharpText.name);
-  const sizeMatch = /(\d+(?:\.\d+)?) (B|KB|MB|GB)/.exec(single);
-  assert(sizeMatch, `no file size shown in the single tile (tile text: ${JSON.stringify(single)})`);
+  assert(/96% sharp/.test(single), `single tile missing the R4 chip text "96% sharp" (tile text: ${JSON.stringify(single)})`);
   assert(
     (await page.getByText("0 selected · 1 total", { exact: true }).count()) === 1,
     "single-photo total missing from the action-bar summary",
@@ -1543,7 +1565,7 @@ async function stateP11({ page, context }) {
   assert(byName(FIX.blurredText.name).band === "blurry" && byName(FIX.blurredText.name).score <= 40, "blurred text fixture regressed");
   await shot(page, "11e-regression-determinism.png");
 
-  return `empty clean; 1 photo shows "${sizeMatch[0]}" + "0 selected · 1 total"; invalid notice leaves total unchanged; start-over (confirm accepted) cleared and revoked ${srcs.length}/${srcs.length} object URLs; 4 fixtures × 2 runs byte-identical (${deterministic.join(", ")})`;
+  return `empty clean; 1 photo chip "96% sharp" (R4 §11.2) + "0 selected · 1 total"; invalid notice leaves total unchanged; start-over (confirm accepted) cleared and revoked ${srcs.length}/${srcs.length} object URLs; 4 fixtures × 2 runs byte-identical (${deterministic.join(", ")})`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1707,7 +1729,7 @@ async function stateP10({ page }) {
     await runState("P2", "Grouped results: band order, counts==tiles==store, empty-band message, no skipped section", stateP2);
 
     console.log(`\n--- P3: score chips + token colors ---`);
-    await runState("P3", "Score chips (F1/F2): number==score and computed color==band token on every scored tile", stateP3);
+    await runState("P3", "Score chips (F1/F2; R4 §11.2): \"NN% sharp\" == store score and computed color == band token on every scored tile", stateP3);
 
     console.log(`\n--- P4: selection model ---`);
     await runState("P4", "Selection: toggle ring/check/aria-pressed, band select-all, summary sync, survives detail + re-render", stateP4);

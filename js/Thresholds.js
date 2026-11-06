@@ -33,6 +33,14 @@
  * room. VARIANCE_REF is the raw variance that maps to score 100 — anything
  * at or above it simply caps at 100.
  *
+ * ── Intake caps (plan v2 INF-1) ──────────────────────────────────────────
+ * This module also holds the named intake limits (plan Finding 4: caps
+ * belong as named constants in Thresholds.js). They guard memory, not
+ * scoring: files over MAX_FILE_BYTES are skipped at intake before any
+ * decode, and a batch longer than MAX_BATCH_FILES is truncated to its
+ * first MAX_BATCH_FILES items. Skipped files always surface in a counted
+ * §9e-style notice — never a silent drop.
+ *
  * ── Threshold rationale ─────────────────────────────────────────────────
  * On the score scale, out-of-focus/motion-blurred photos land below ~25
  * (raw variance ≲ 11), textured sharp photos reach 60+ (raw variance ≳ 10³),
@@ -92,6 +100,35 @@ export const BAND_REVIEW = "review";
 export const BAND_SHARP = "sharp";
 export const BAND_SKIPPED = "skipped"; // analysis skipped (no visible pixels / too small)
 
+/* ── Intake caps (plan v2 INF-1) ────────────────────────────────────────── */
+
+/* Per-file size cap: 50 MB. Files strictly over this are skipped at intake
+   (App.partitionIntake) BEFORE any placeholder tile or decode attempt — the
+   file is never read into memory. Rationale for the value: the decode
+   pipeline supports JPEG/PNG, where real photos run ~1–15 MB and even a
+   100-megapixel JPEG rarely exceeds ~40 MB — so 50 MB sits comfortably
+   above every legitimate photo while catching accidental giant inputs
+   (video files, RAW sidecars, dumps renamed to .jpg) before
+   createImageBitmap tries to buffer them. Comparison is `size > cap`, so a
+   file at exactly 50 MB still loads — matching the "over 50 MB" copy. */
+const MB = 1024 * 1024;
+export const MAX_FILE_BYTES = 50 * MB;
+
+/* Human-readable form of the cap for notice copy. Derived from
+   MAX_FILE_BYTES so the copy can never drift from the enforced value
+   ("50 MB"; non-whole-MB values render naturally, e.g. "50.5 MB"). */
+export const MAX_FILE_LABEL = `${MAX_FILE_BYTES / MB} MB`;
+
+/* Per-batch file-count cap: 500. Bounds what one pick can create — the
+   intake pool decodes 4 files at a time, and each accepted file becomes a
+   store record, a thumbnail blob URL, and a tile — so a folder walk over a
+   huge library cannot balloon memory in one batch. Applied AFTER the size
+   filter (room is never wasted on files that could not load anyway), to
+   the first 500 items in arrival order; the excess is skipped with a
+   counted notice while valid files within the cap load unaffected. Larger
+   libraries load across several "Add more" picks. */
+export const MAX_BATCH_FILES = 500;
+
 /**
  * Working-size math for a decoded image. Keeps the aspect ratio, never
  * upscales (a 64 px avatar is analyzed at 64 px — upscaling would invent
@@ -120,6 +157,79 @@ export function normalizeScore(rawVariance) {
   }
   const scaled = (100 * Math.log1p(rawVariance)) / Math.log1p(VARIANCE_REF);
   return Math.max(SCORE_MIN, Math.min(SCORE_MAX, Math.round(scaled)));
+}
+
+/* ── HD converter (plan v2 R5, design-spec-v2 §11.3) ────────────────────── */
+
+/* Slider ceiling: the user-facing factor never exceeds 4×. The EFFECTIVE
+   max for a given photo is the runtime capability probe's result (§11.3.3,
+   HDConverter.probeMax) — this constant is only the top of the candidate
+   list and the slider's nominal range, never a browser-limit claim. */
+export const MAX_UPSCALE_FACTOR = 4;
+
+/* Probe candidates: factors tested from largest to smallest (§11.3.3 runs
+   "4× down to 1.5× (0.5 steps)"). Derived from MAX_UPSCALE_FACTOR so the
+   list can never drift from the slider ceiling. */
+export const UPSCALE_CANDIDATE_FACTORS = (() => {
+  const factors = [];
+  for (let f = MAX_UPSCALE_FACTOR; f >= 1.5; f -= 0.5) {
+    factors.push(f);
+  }
+  return factors;
+})();
+
+/* JPEG encode quality for HD outputs (plan-verbatim 0.92). PNG outputs are
+   lossless and ignore it. The "quality 92" label is derived from this
+   constant at the call sites (MAX_FILE_LABEL precedent — the copy can never
+   drift from the enforced value). */
+export const JPEG_QUALITY = 0.92;
+
+/**
+ * Output-dimension math — THE one rounding rule (§11.3.2: "The readout and
+ * the saved file's dimensions must agree exactly — one rounding rule,
+ * computed once, consumed by worker and UI alike"). Round(w × f) ×
+ * Round(h × f), floored at 1px so degenerate sources cannot crash the
+ * canvas math. The probe, the readout, the worker's target, and the e2e
+ * expectation all call this — nowhere else may a target dimension be
+ * computed.
+ */
+export function upscaleDimensions(width, height, factor) {
+  return {
+    width: Math.max(1, Math.round(width * factor)),
+    height: Math.max(1, Math.round(height * factor)),
+  };
+}
+
+/* Output naming (§11.3.1/§11.3.5): "{basename}-hd.jpg", where basename is
+   the filename minus its final extension (".jpeg" also lands on ".jpg" by
+   stripping). PNG sources keep their extension → "{basename}-hd.png".
+   Everything else saves JPEG at JPEG_QUALITY. One helper so the panel's
+   format line, the actual encode format, and the download's filename can
+   never disagree. */
+export function hdOutputSpec(filename) {
+  const dot = filename.lastIndexOf(".");
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const isPng = /\.png$/i.test(filename);
+  return {
+    name: `${base}-hd.${isPng ? "png" : "jpg"}`,
+    mime: isPng ? "image/png" : "image/jpeg",
+  };
+}
+
+/* ── Percentage display (plan v2 R4, design-spec-v2 §11.2) ───────────────── */
+
+/**
+ * Score → display text: "NN% sharp". Identity mapping — the percentage IS
+ * the stored 0–100 integer (normalizeScore already returns a rounded
+ * integer), so there is no transformation, no re-rounding, no floor here.
+ * Score 0 renders "0% sharp" (a real measurement); unscored and skipped
+ * photos never reach this helper — their chips render "—" at the call
+ * sites (§11.2). One shared helper so the tile chips, the pending grid,
+ * and the detail chip cannot drift apart (the MAX_FILE_LABEL precedent:
+ * display copy derived at one source).
+ */
+export function formatPercent(score) {
+  return `${score}% sharp`;
 }
 
 /** Score → band id (constants above). */

@@ -2,9 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- INF-2 (plan v2 Phase R2): strict meta CSP. GitHub Pages cannot send
+       HTTP headers, so the policy ships in the document (MDN: the same
+       restrictions can be applied via the <meta> element). Each directive
+       was verified against the app's real mechanics:
+         default-src 'self'   — fallback for every fetch directive (fonts,
+                                media, frames are unused; system fonts only,
+                                §14.1); remote origins blocked everywhere.
+         script-src 'self'    — the one module entry js/main.js; no inline
+                                scripts, no eval, no remote code.
+         style-src 'self'     — css/style.css only; no <style> elements and
+                                no style="" attributes exist in the app, and
+                                JS styles via CSSOM property writes
+                                (el.style.*), which CSP does not block — so
+                                no 'unsafe-inline'.
+         img-src 'self' blob: — thumbnails, the detail stage, and the
+                                download anchors are blob: object URLs; the
+                                favicon is same-origin assets/mark.svg; no
+                                data: URIs exist in app code.
+         worker-src 'self'    — blur-worker.js is a same-origin module worker
+                                (never blob:/data:; per MDN, only
+                                blob:/data:-origin workers inherit the
+                                document's policy).
+         connect-src 'none'   — the "photos never leave this device" promise
+                                made structural: fetch/XHR/WebSocket/
+                                sendBeacon all fail by policy.
+         object-src 'none'; base-uri 'none' — no <object>/<embed>; no <base>
+                                (blocks <base> URL hijacking).
+       frame-ancestors is deliberately ABSENT: MDN — "this directive is not
+       supported in the <meta> element", and it does not fall back to
+       default-src. Header-only enforcement is impossible on Pages; the app
+       has no auth and no state-changing requests, so embedding risk is nil. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; worker-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#F2F2F7">
+  <meta name="theme-color" content="#F2F3F5">
   <meta name="description" content="Find the blurry photos in your library. Photos never leave this device.">
   <title>Blurry Photo Cleaner</title>
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">

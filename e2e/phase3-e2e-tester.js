@@ -207,7 +207,12 @@ async function visibleTileNames(page) {
   const names = [];
   for (let i = 0; i < count; i += 1) {
     const text = (await items.nth(i).innerText()) || "";
-    names.push(text.split("\n")[0].trim());
+    // R6 re-scope (2026-11-06, design-spec-v2 §11.5.5): each tile now also
+    // carries the aria-hidden "Suggested" badge (blurry tiles) and a
+    // "Delete" row — the filename is the first line that is neither.
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    const filename = lines.find((l) => l !== "Suggested" && l !== "Delete") ?? "";
+    names.push(filename);
   }
   return names;
 }
@@ -467,8 +472,10 @@ async function stateT1({ page, context }) {
       ["blurry", "review", "sharp"].includes(p.band),
       `"${p.name}" band ${JSON.stringify(p.band)} is not a real band`,
     );
+    // R4 re-scope (2026-11-06, design-spec-v2 §11.2): the chip is the identity-
+    // mapped percentage — display text is `${score}% sharp`, never the bare score.
     const chip = await chipText(page, p.name);
-    assert(chip === String(p.score), `chip for "${p.name}" shows "${chip}", expected "${p.score}"`);
+    assert(chip === `${p.score}% sharp`, `chip for "${p.name}" shows "${chip}", expected "${p.score}% sharp"`);
     chipEvidence.push(`${p.name}=${p.score}/${p.band}`);
   }
 
@@ -650,8 +657,9 @@ async function stateT2({ page, tag }) {
   assert(tilesFinal === 20, `gallery shows ${tilesFinal} tiles, expected 20`);
   let pendingChips = 0;
   for (const p of state.photos) {
+    // R4 re-scope (2026-11-06, design-spec-v2 §11.2): identity-mapped "NN% sharp".
     const chip = await chipText(page, p.name);
-    assert(chip === String(p.score), `chip for "${p.name}" shows "${chip}", expected "${p.score}"`);
+    assert(chip === `${p.score}% sharp`, `chip for "${p.name}" shows "${chip}", expected "${p.score}% sharp"`);
     if (chip === "—") pendingChips += 1;
   }
   assert(pendingChips === 0, `${pendingChips} chips still show "—" after resolution`);
@@ -774,8 +782,9 @@ async function stateT3({ page }) {
   const chipEvidence = [];
   for (const p of state.photos) {
     assert(["blurry", "review", "sharp"].includes(p.band), `valid photo "${p.name}" has no band (${p.band})`);
+    // R4 re-scope (2026-11-06, design-spec-v2 §11.2): identity-mapped "NN% sharp".
     const chip = await chipText(page, p.name);
-    assert(chip === String(p.score), `chip for "${p.name}" shows "${chip}", expected "${p.score}"`);
+    assert(chip === `${p.score}% sharp`, `chip for "${p.name}" shows "${chip}", expected "${p.score}% sharp"`);
     chipEvidence.push(`${p.name}=${p.score}/${p.band}`);
   }
 
@@ -839,7 +848,8 @@ async function stateT4({ page }) {
   assert(skippedChip === "—", `skipped tile chip shows "${skippedChip}", expected "—"`);
   const sharpPhoto = state.photos.find((p) => p.name === FIX.sharpText.name);
   const sharpChip = await chipText(page, FIX.sharpText.name);
-  assert(sharpChip === String(sharpPhoto.score), `scored chip shows "${sharpChip}", expected "${sharpPhoto.score}"`);
+  // R4 re-scope (2026-11-06, design-spec-v2 §11.2): identity-mapped "NN% sharp".
+  assert(sharpChip === `${sharpPhoto.score}% sharp`, `scored chip shows "${sharpChip}", expected "${sharpPhoto.score}% sharp"`);
 
   await shot(page, "04-transparent-skip-notice.png");
   return `transparent: band "skipped", score null, chip "—", notice + ledger visible; sharp companion scored ${sharpChip}`;
@@ -934,7 +944,8 @@ async function stateT6({ page }) {
     `retry did not score the photo: ${JSON.stringify(recovered)}`,
   );
   const recoveredChip = await chipText(page, FIX.sharpText.name);
-  assert(recoveredChip === String(recovered.score), `recovered chip shows "${recoveredChip}", expected "${recovered.score}"`);
+  // R4 re-scope (2026-11-06, design-spec-v2 §11.2): identity-mapped "NN% sharp".
+  assert(recoveredChip === `${recovered.score}% sharp`, `recovered chip shows "${recoveredChip}", expected "${recovered.score}% sharp"`);
   await shot(page, "06b-worker-failure-recovered.png");
 
   // And the app keeps working for the next batch too.
@@ -971,10 +982,16 @@ async function stateT7({ page, context }) {
   await chooseFiles(page, "Choose photos", [asInput(FIX.sharpText)]);
   await expectExactText(page, FIX.sharpText.name, "tile filename");
   await expectExactText(page, "1 photo", "photo count");
-  const singleText = await tileText(page, FIX.sharpText.name);
-  const sizeMatch = /(\d+(?:\.\d+)?) (B|KB|MB|GB)/.exec(singleText);
-  assert(sizeMatch, `no file size shown in the single tile (tile text: ${JSON.stringify(singleText)})`);
+  /* R4 re-scope (2026-11-06): design-spec-v2 §11.2 layout consequence — the
+     tile's file-size caption yields its slot to the wider "NN% sharp" chip and
+     moves to the detail view (§11.5, Phase R6). The old "N KB/MB" tile
+     assertion is dropped with that citation; the tile is asserted on its NEW
+     text instead: the R4 percentage chip, identity-mapped from the store
+     score (96 → "96% sharp") once analysis resolves. */
   await expectButton(page, "Start over", "Start over after selection");
+  await waitForResolved(page, 1, ANALYSIS_TIMEOUT, "regression single photo");
+  const singleChip = await chipText(page, FIX.sharpText.name);
+  assert(singleChip === "96% sharp", `single-photo chip "${singleChip}", expected "96% sharp" (R4 §11.2 identity mapping)`);
   await shot(page, "07b-regression-single-photo.png");
 
   /* (c) invalid file → visible notice, gallery unchanged */
@@ -1013,7 +1030,7 @@ async function stateT7({ page, context }) {
   assert(missing.length === 0, `${missing.length}/${srcs.length} thumbnail object URLs never revoked. Example: ${missing[0]}`);
   await shot(page, "07d-regression-after-start-over.png");
 
-  return `empty state clean; 1 photo shows "${sizeMatch[0]}"; invalid notice leaves 1 tile; start-over (confirm accepted) cleared and revoked ${srcs.length}/${srcs.length} object URLs`;
+  return `empty state clean; 1 photo chip "${singleChip}" (R4 §11.2); invalid notice leaves 1 tile; start-over (confirm accepted) cleared and revoked ${srcs.length}/${srcs.length} object URLs`;
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,27 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 400" role="img" aria-labelledby="fig1-title fig1-desc">
   <title id="fig1-title">System flow: Input, Process, Output</title>
-  <desc id="fig1-desc">Selected photo files go in; each photo is decoded upright, downscaled to a 256-pixel working image, converted to grayscale, scored with Laplacian variance, normalized to 0-100, and grouped into Blurry, Needs review, or Sharp; the output is a grouped review grid with downloads.</desc>
+  <desc id="fig1-desc">Selected photo files go in; each photo is decoded upright, downscaled to a 256-pixel working image, converted to grayscale, scored with Laplacian variance, normalized to 0-100, and grouped into Blurry, Needs review, or Sharp; the output is a grouped review grid with NN% sharp scores, from which the user downloads originals or saves HD copies and removes recommended photos from the session.</desc>
 
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 Z" fill="#1E6EF4"/>
+      <path d="M0 0 L10 5 L0 10 Z" fill="#2E5C95"/>
     </marker>
   </defs>
 
   <style>
-    .box { fill: #FFFFFF; stroke: #000000; stroke-opacity: 0.15; stroke-width: 1; }
-    .box-title { font: 600 15px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #000000; }
-    .box-line { font: 400 12.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #636366; }
-    .box-strong { font: 600 12.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #000000; }
-    .step-num { font: 400 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #6E6E73; }
-    .step-text { font: 400 12.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #000000; }
-    .note { font: 400 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #6E6E73; }
-    .sep { stroke: #000000; stroke-opacity: 0.08; stroke-width: 1; }
-    .flow { stroke: #1E6EF4; stroke-width: 2; fill: none; }
+    .box { fill: #FFFFFF; stroke: #16191E; stroke-opacity: 0.10; stroke-width: 1; }
+    .box-title { font: 600 15px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #16191E; }
+    .box-line { font: 400 12.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #57606C; }
+    .box-strong { font: 600 12.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #16191E; }
+    .step-num { font: 400 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #646E7B; }
+    .step-text { font: 400 12.5px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #16191E; }
+    .note { font: 400 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #646E7B; }
+    .sep { stroke: #16191E; stroke-opacity: 0.08; stroke-width: 1; }
+    .flow { stroke: #2E5C95; stroke-width: 2; fill: none; }
   </style>
 
   <!-- Input box -->
-  <rect class="box" x="24" y="104" width="200" height="162" rx="10"/>
+  <rect class="box" x="24" y="104" width="200" height="162" rx="12"/>
   <text class="box-title" x="44" y="134">Input</text>
   <line class="sep" x1="44" y1="148" x2="204" y2="148"/>
   <text class="box-strong" x="44" y="174">Selected photo files</text>
@@ -34,7 +34,7 @@
   <line class="flow" x1="228" y1="185" x2="292" y2="185" marker-end="url(#arrow)"/>
 
   <!-- Process box -->
-  <rect class="box" x="300" y="24" width="320" height="322" rx="10"/>
+  <rect class="box" x="300" y="24" width="320" height="322" rx="12"/>
   <text class="box-title" x="320" y="54">Process</text>
   <text class="note" x="320" y="72">per photo, in a background Web Worker</text>
   <line class="sep" x1="320" y1="84" x2="600" y2="84"/>
@@ -67,12 +67,15 @@
   <line class="flow" x1="624" y1="185" x2="688" y2="185" marker-end="url(#arrow)"/>
 
   <!-- Output box -->
-  <rect class="box" x="696" y="104" width="200" height="162" rx="10"/>
-  <text class="box-title" x="716" y="134">Output</text>
-  <line class="sep" x1="716" y1="148" x2="876" y2="148"/>
-  <text class="box-strong" x="716" y="174">Grouped review grid</text>
-  <text class="box-line" x="716" y="196"><tspan fill="#BB1125">Blurry</tspan><tspan fill="#6E6E73"> &#183; </tspan><tspan fill="#A34400">Needs review</tspan><tspan fill="#6E6E73"> &#183; </tspan><tspan fill="#007029">Sharp</tspan></text>
-  <text class="box-line" x="716" y="218">with counts and scores</text>
-  <text class="note" x="716" y="246">select the blurry ones,</text>
-  <text class="note" x="716" y="262">download, delete on the phone</text>
+  <rect class="box" x="696" y="84" width="200" height="202" rx="12"/>
+  <text class="box-title" x="716" y="114">Output</text>
+  <line class="sep" x1="716" y1="128" x2="876" y2="128"/>
+  <text class="box-strong" x="716" y="154">Grouped review grid</text>
+  <text class="box-line" x="716" y="176"><tspan fill="#BB1125">Blurry</tspan><tspan fill="#646E7B"> &#183; </tspan><tspan fill="#A34400">Needs review</tspan><tspan fill="#646E7B"> &#183; </tspan><tspan fill="#007029">Sharp</tspan></text>
+  <text class="box-line" x="716" y="198">with &ldquo;NN% sharp&rdquo; scores</text>
+  <text class="box-line" x="716" y="220">and a Suggested mark on</text>
+  <text class="box-line" x="716" y="238">every Blurry photo</text>
+  <text class="note" x="716" y="262">select the recommended ones,</text>
+  <text class="note" x="716" y="278">download originals or HD copies,</text>
+  <text class="note" x="716" y="294">then delete the files on the phone</text>
 </svg>

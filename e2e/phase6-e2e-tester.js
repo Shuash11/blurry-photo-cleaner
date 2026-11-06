@@ -91,11 +91,12 @@ const MOBILE_CONTEXT = {
 };
 const DESKTOP_CONTEXT = { viewport: DESKTOP_VIEWPORT, acceptDownloads: true };
 
-/* Phase 6 F7 tokens: .btn-secondary:disabled — muted fill + muted label. */
-const DISABLED_BG = "rgb(242, 242, 247)";   // --color-surface-muted #F2F2F7
-const DISABLED_FG = "rgb(110, 110, 115)";   // --color-text-muted #6E6E73
-const RING_LIGHT = "rgb(30, 110, 244)";     // --color-accent-strong #1E6EF4
-const RING_DARK = "rgb(255, 255, 255)";     // --color-stage-text
+/* Phase 6 F7 tokens (re-scoped to the v2 design-spec-v2 §4.7 block,
+   2026-11-06): .btn-secondary:disabled — muted fill + muted label. */
+const DISABLED_BG = "rgb(238, 241, 244)";   // --color-surface-muted #EEF1F4 (v2; was #F2F2F7)
+const DISABLED_FG = "rgb(100, 110, 123)";   // --color-text-muted #646E7B (v2; was #6E6E73)
+const RING_LIGHT = "rgb(46, 92, 149)";      // --color-accent #2E5C95 (v2; v1 accent-strong #1E6EF4 merged per §4.8)
+const RING_DARK = "rgb(255, 255, 255)";     // --color-stage-text (unchanged)
 
 /* ------------------------------------------------------------------ */
 /* Run state                                                           */
@@ -558,9 +559,14 @@ async function stateM1({ page, context }) {
   );
   await shot(page, "m1-03-results.png");
 
-  /* select 2 via tap targets */
+  /* select 2 via tap targets. R6 re-scope (2026-11-06, design-spec-v2
+     §11.5.5): a Blurry tile's accessible name now ends with ", suggested
+     for deletion", so the button match must accept both name forms. */
   const tileBtn = (name) =>
-    page.getByRole("listitem").filter({ hasText: name }).getByRole("button", { name, exact: true });
+    page
+      .getByRole("listitem")
+      .filter({ hasText: name })
+      .getByRole("button", { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(, suggested for deletion)?$`) });
   const taps = [FIX.sharpText.name, FIX.blurredCheckerboard.name];
   const hitAreas = [];
   for (const name of taps) {
@@ -597,7 +603,8 @@ async function stateM1({ page, context }) {
         const btn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Add more");
         if (!btn || !btn.disabled) return null;
         const cs = getComputedStyle(btn);
-        if (cs.backgroundColor !== "rgb(242, 242, 247)" || cs.color !== "rgb(110, 110, 115)") return null;
+        // v2 §4.7 values — must stay in sync with DISABLED_BG / DISABLED_FG above.
+        if (cs.backgroundColor !== "rgb(238, 241, 244)" || cs.color !== "rgb(100, 110, 123)") return null;
         return { bg: cs.backgroundColor, color: cs.color };
       },
       null,
@@ -807,7 +814,9 @@ async function stateK1({ page }) {
   for (let i = 0; i < 90 && !reachedDownload; i += 1) {
     const s = await tabStop(page);
     stops.push(s);
-    if (s.name === "Select all" || s.name === "Deselect") sawBandToggle += 1;
+    if (s.name === "Select all" || s.name === "Deselect" || /^Select all recommended \(\d+\)$/.test(s.name)) {
+    sawBandToggle += 1;
+  }
     if (s.name === "Add more") sawAddMore = true;
     if (s.ariaPressed === "true" || s.ariaPressed === "false") {
       if (tileToggles.length < 2) {
@@ -1063,11 +1072,15 @@ async function stateA1({ page }) {
   );
   await shot(page, "a1-01-results-6.png");
 
-  /* toggle 2 tiles → "2 selected" (trailing debounce allowed) */
+  /* toggle 2 tiles → "2 selected" (trailing debounce allowed). R6 re-scope:
+     a Blurry tile's accessible name ends with ", suggested for deletion"
+     (§11.5.5) — match either name form. */
+  const nameOrSuggested = (name) =>
+    new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(, suggested for deletion)?$`);
   const blurryNames = await renderedTileNames(page, "blurry");
   const sharpNames = await renderedTileNames(page, "sharp");
   const t0 = Date.now();
-  await page.getByRole("button", { name: blurryNames[0], exact: true }).click();
+  await page.getByRole("button", { name: nameOrSuggested(blurryNames[0]) }).click();
   await page.getByRole("button", { name: sharpNames[0], exact: true }).click();
   const announced = await page
     .waitForFunction(() => (window.__announceLog || []).some((e) => e.text === "2 selected"), null, {
