@@ -173,9 +173,11 @@ ipo.rows[1].cells[2].text = (
     "A review grid grouped into the three bands, with counts and an “NN% "
     "sharp” chip on every tile. One tap selects the keepers (Sharp plus the "
     "ticked Needs-review photos). Downloads ask for a format (Original, PNG, "
-    "JPEG, WebP); HD copies are previewed before saving and re-scored on "
-    "download. Photos are removed from the review session after a "
-    "confirmation dialog — then deleted on the phone in the gallery app."
+    "JPEG, WebP). The HD Converter shows a before/after wipe slider that "
+    "animates blurry → clear; the improved copy can be kept in the review "
+    "with no download at all, and it is re-scored into the band it earns. "
+    "Photos are removed from the review session after a confirmation dialog "
+    "— then deleted on the phone in the gallery app."
 )
 
 picture(ASSETS / "figure1-system-flow.png", 6.2)
@@ -186,7 +188,7 @@ shots = [
     ("screenshot-1-empty.png", "Figure 2. Empty upload screen. Photos never leave the device."),
     ("screenshot-2-analyzing.png", "Figure 3. Analyzing photos: progress card over the pending grid (phone view)."),
     ("screenshot-3-results.png", "Figure 4. Results grouped into bands, with an “NN% sharp” chip on every tile and a Suggested mark on the blurry ones."),
-    ("screenshot-4-hd-converter.png", "Figure 5. The HD converter: choose a size, a sharpening level, and a format; preview the result before saving."),
+    ("screenshot-4-hd-converter.png", "Figure 5. The HD Converter: choose a size, a sharpening level, and a format, then Create preview — the before/after wipe slider auto-sweeps from blurry to clear. No download needed: Keep in review adds the improved copy with a fresh score."),
     ("screenshot-5-export-formats.png", "Figure 6. Every download asks for its format: Original, PNG, JPEG, or WebP."),
 ]
 for name, cap in shots:

@@ -1240,6 +1240,137 @@ img {
   object-fit: contain;
 }
 
+/* --------------------------------------------------------------------------
+   v0.4.1 BEFORE/AFTER WIPE (user request: "animation must be wipe slider")
+   The converted preview layers over the original, clipped from the divider
+   rightward; the divider drags (pointer or arrow keys). The auto-sweep on
+   preview creation animates the blurry→clear transition.
+   -------------------------------------------------------------------------- */
+
+/* While comparing, stage drags belong to the divider — never the gallery.
+   The min-height keeps the wipe readable when the converter panel shares
+   the column (a 50px stage made the comparison unreadable on desktop). */
+.detail__stage.is-comparing {
+  position: relative;
+  touch-action: none;
+  min-height: 200px;
+}
+
+/* The panel column may overflow once the stage holds its comparison
+   height — keep the controls reachable by scrolling instead of clipping. */
+.detail__panel {
+  overflow-y: auto;
+}
+
+.detail__after {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: inset(0 0 0 50%);
+  pointer-events: none; /* drags pass through to the stage */
+}
+
+/* The sweep animation runs only with .is-animating (dragging stays instant). */
+.detail__stage.is-animating .detail__after,
+.detail__stage.is-animating .detail__wipe {
+  transition:
+    clip-path 900ms var(--ease-standard),
+    left 900ms var(--ease-standard);
+}
+
+/* The divider: a 44px-wide grab strip with a 2px line and a round handle. */
+.detail__wipe {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 44px;
+  transform: translateX(-50%);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 2;
+}
+
+.detail__wipe::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.detail__wipe-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-full);
+  background: #FFFFFF;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* The two chevrons inside the handle (‹ ›). */
+.detail__wipe-handle::before,
+.detail__wipe-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-top: 2px solid #1C1E21;
+  border-right: 2px solid #1C1E21;
+}
+
+.detail__wipe-handle::before {
+  left: 8px;
+  transform: rotate(-135deg);
+}
+
+.detail__wipe-handle::after {
+  right: 8px;
+  transform: rotate(45deg);
+}
+
+.detail__wipe:focus-visible {
+  outline: 2px solid var(--color-stage-text);
+  outline-offset: 2px;
+}
+
+/* Corner labels: Before (left) / After (right). */
+.detail__wipe-label {
+  position: absolute;
+  top: var(--space-12);
+  z-index: 3;
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-full);
+  background: rgba(11, 14, 19, 0.55);
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #FFFFFF;
+  pointer-events: none;
+}
+
+.detail__wipe-label--before {
+  left: var(--space-12);
+}
+
+.detail__wipe-label--after {
+  right: var(--space-12);
+}
+
 /* Prev/next chevrons flank the stage, desktop only (§7.3). */
 .detail__nav {
   display: none;

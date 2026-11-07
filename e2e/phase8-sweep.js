@@ -679,7 +679,7 @@ async function runScenario(page) {
   const lastBlurry = blurryNames[blurryNames.length - 1];
   await page.getByRole("button", { name: `View ${firstBlurry}`, exact: true }).click();
   await expectVisible(page.getByRole("dialog", { name: `Reviewing ${firstBlurry}`, exact: true }), "detail dialog");
-  const stageURL = await page.locator(".detail__img").getAttribute("src");
+  const stageURL = await page.locator(".detail__stage > .detail__img").getAttribute("src");
   assert(stageURL && stageURL.startsWith("blob:"), `detail stage src is not a blob URL: ${stageURL}`);
 
   const nextVisible = page.locator('button[aria-label="Next photo"]').filter({ visible: true }).first();

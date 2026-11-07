@@ -1025,10 +1025,10 @@ async function stateP6({ page }) {
   await shot(page, "06a-detail-desktop.png");
 
   // Navigate next → middle sharp photo; image swaps; both chevrons enabled.
-  const srcBefore = await panel().locator(".detail__img").getAttribute("src");
+  const srcBefore = await panel().locator(".detail__stage > .detail__img").getAttribute("src");
   await navNext.click();
   await waitForDetailName(page, middleSharp);
-  const srcAfter = await panel().locator(".detail__img").getAttribute("src");
+  const srcAfter = await panel().locator(".detail__stage > .detail__img").getAttribute("src");
   assert(srcBefore !== srcAfter, "detail image src did not change on navigation");
   assert(!(await navPrev.isDisabled()), "prev chevron disabled at the middle photo");
   assert(!(await navNext.isDisabled()), "next chevron disabled at the middle photo");

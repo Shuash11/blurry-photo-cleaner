@@ -672,8 +672,17 @@ async function stateR3_1({ page, context }) {
   assert(busy.spinner === true, "download busy: spinner never became visible");
   await page.waitForFunction(() => (document.querySelector("#live-region")?.textContent || "").trim() === "Saved 2 photos", null, { timeout: STEP_TIMEOUT, polling: 50 });
 
-  /* detail open → navigate → close (Escape) → focus return */
-  const openName = FIXTURES[0].name;
+  /* detail open → navigate → close (Escape) → focus return.
+     Flake fix (2026-11-07): band order is DECODE-completion order, so a
+     fixed fixture name can land LAST in its band and its "Next photo"
+     control is (correctly) disabled — the click then times out. Derive the
+     target from the DOM instead: the FIRST sharp tile is guaranteed to
+     have a next (the sharp band always holds 2 fixtures here). */
+  const [openName, secondName] = await page.evaluate(() =>
+    [...document.querySelectorAll(".band--sharp .tile__filename")]
+      .map((el) => el.textContent.trim())
+      .slice(0, 2),
+  );
   await page.getByRole("button", { name: `View ${openName}`, exact: true }).click({ timeout: STEP_TIMEOUT });
   await page.waitForSelector(".detail__panel", { state: "visible", timeout: STEP_TIMEOUT });
   await page.waitForFunction((n) => document.querySelector(".detail__filename")?.textContent === n, openName, { timeout: STEP_TIMEOUT, polling: 50 });
@@ -681,7 +690,7 @@ async function stateR3_1({ page, context }) {
   assert(panelLabel === `Reviewing ${openName}`, `detail panel aria-label "${panelLabel}", expected "Reviewing ${openName}"`);
   await shot(page, "06-detail.png");
   await page.getByRole("button", { name: "Next photo", exact: true }).click({ timeout: STEP_TIMEOUT });
-  await page.waitForFunction((n) => document.querySelector(".detail__filename")?.textContent === n, FIXTURES[1].name, { timeout: STEP_TIMEOUT, polling: 50 });
+  await page.waitForFunction((n) => document.querySelector(".detail__filename")?.textContent === n, secondName, { timeout: STEP_TIMEOUT, polling: 50 });
   const nextDisabled = await page.getByRole("button", { name: "Next photo", exact: true }).isDisabled();
   assert(nextDisabled, "detail navigate: Next photo not disabled at the last photo of the band");
   await page.getByRole("button", { name: "Previous photo", exact: true }).click({ timeout: STEP_TIMEOUT });

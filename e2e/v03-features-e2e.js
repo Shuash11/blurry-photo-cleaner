@@ -93,7 +93,7 @@ try {
 
     await page.locator(".band--blurry .tile__meta-btn").first().click();
     await page.waitForSelector(".detail__panel", { timeout: 5000 });
-    await page.getByRole("button", { name: "Save HD copy" }).click();
+    await page.getByRole("button", { name: "HD Converter" }).click();
     await page.waitForSelector(".hd-panel", { timeout: 5000 });
     // Sharpen High + 2× — the combination that can genuinely re-band.
     await page.locator('.hd-panel .choice-row__pill', { hasText: "High" }).click();
@@ -103,16 +103,48 @@ try {
 
     await page.getByRole("button", { name: "Create preview" }).click();
     await page.waitForSelector(".hd-preview__actions:not([hidden])", { timeout: 20000 });
-    check("preview: stage swapped to the converted result", await page.evaluate(() => {
-      const img = document.querySelector(".detail__img");
-      return img && img.src.startsWith("blob:");
-    }));
 
-    const [download] = await Promise.all([
-      page.waitForEvent("download", { timeout: 20000 }),
-      page.getByRole("button", { name: "Download HD copy" }).click(),
-    ]);
-    check("preview: download named {basename}-hd.jpg", /-hd\.jpg$/.test(download.suggestedFilename()), download.suggestedFilename());
+    // v0.4.1 WIPE SLIDER (user request): the before/after comparison is
+    // visible WITHOUT any download.
+    check("wipe: divider visible with role=slider", await page.evaluate(() => {
+      const w = document.querySelector(".detail__wipe");
+      return !!w && !w.hidden && w.getAttribute("role") === "slider";
+    }));
+    check("wipe: Before/After labels visible", await page.evaluate(() => {
+      const b = document.querySelector(".detail__wipe-label--before");
+      const a = document.querySelector(".detail__wipe-label--after");
+      return !!b && !b.hidden && !!a && !a.hidden && b.textContent === "Before" && a.textContent === "After";
+    }));
+    check("wipe: after layer shows the converted image (no download)", await page.evaluate(() => {
+      const img = document.querySelector(".detail__after img");
+      return !!img && img.src.startsWith("blob:");
+    }));
+    // Wait out the auto-sweep, then drag the divider like a user.
+    await page.waitForTimeout(2100);
+    const clipBefore = await page.evaluate(() => document.querySelector(".detail__after").style.clipPath);
+    const stageBox = await page.locator(".detail__stage").boundingBox();
+    await page.mouse.move(stageBox.x + stageBox.width * 0.75, stageBox.y + stageBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(stageBox.x + stageBox.width * 0.3, stageBox.y + stageBox.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+    const clipAfter = await page.evaluate(() => document.querySelector(".detail__after").style.clipPath);
+    const ariaNow = await page.evaluate(() => document.querySelector(".detail__wipe").getAttribute("aria-valuenow"));
+    check("wipe: dragging moves the divider (clip-path changes)", clipBefore !== clipAfter, `${clipBefore} -> ${clipAfter}`);
+    check("wipe: aria-valuenow tracks the divider", Number(ariaNow) >= 25 && Number(ariaNow) <= 35, ariaNow);
+    // Keyboard: the divider is a real ARIA slider.
+    await page.locator(".detail__wipe").focus();
+    await page.keyboard.press("ArrowRight");
+    const ariaAfterKey = await page.evaluate(() => document.querySelector(".detail__wipe").getAttribute("aria-valuenow"));
+    check("wipe: ArrowRight steps the divider", Number(ariaAfterKey) === Number(ariaNow) + 5, `${ariaNow} -> ${ariaAfterKey}`);
+    await page.screenshot({ path: "e2e/artifacts/v03-wipe.png" });
+
+    // KEEP IN REVIEW — no download at all (user request).
+    const downloadsSeen = [];
+    page.on("download", (d) => downloadsSeen.push(d.suggestedFilename()));
+    await page.getByRole("button", { name: "Keep in review" }).click();
+    await page.waitForFunction(() => window.__debugState().photos.length === 2, null, { timeout: 30000 });
+    check("keep: no download happened", downloadsSeen.length === 0, JSON.stringify(downloadsSeen));
 
     // Auto-reband: the copy joins the review with its own score/band.
     await page.waitForFunction(() => window.__debugState().photos.length === 2, null, { timeout: 30000 });

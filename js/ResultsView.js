@@ -596,7 +596,7 @@ class PhotoDetailView {
   #deleteBtn = null; // §11.5.2 detail "Delete" (destructive red on the stage)
   #doneBtn = null; // focus parking spot when a focused control self-disables
   #bottomEl = null;
-  #saveHdBtn = null; // "Save HD copy" — renders only when the probe finds a factor above 1× (§11.3.2)
+  #saveHdBtn = null; // "HD Converter" — renders only when the probe finds a factor above 1× (§11.3.2)
   #hdPanel = null; // the inline converter panel (HDPanelView) while open
   #probeSeq = 0; // guards async probe results against navigation/close races
   #group = [];
@@ -607,6 +607,16 @@ class PhotoDetailView {
   #touchStart = null;
   #previewStageURL = null; // v0.3.0: the HD-preview swap on the stage
   #exportChooser = null; // v0.3.0: the per-photo export format chooser
+  // v0.4.1 before/after wipe (user request)
+  #stageEl = null;
+  #afterLayer = null;
+  #afterImg = null;
+  #wipe = null;
+  #beforeLabel = null;
+  #afterLabel = null;
+  #wipePos = 50;
+  #wipeDragging = false;
+  #wipeSweepTimers = [];
 
   constructor({ onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD }) {
     this.#callbacks = { onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD };
@@ -629,7 +639,7 @@ class PhotoDetailView {
     this.#refreshNav();
     this.#panel.focus({ preventScroll: true });
     // §11.3.3: the capability probe runs when the detail view OPENS (not
-    // when the converter opens) so the "Save HD copy" entry's presence and
+    // when the converter opens) so the "HD Converter" entry's presence and
     // the Unavailable state are decidable before any converter exists.
     this.#probeHD(photo);
   }
@@ -678,7 +688,7 @@ class PhotoDetailView {
 
   /**
    * Run the per-photo capability probe and — when a factor above 1× is
-   * supported — render the "Save HD copy" secondary entry in the bottom bar
+   * supported — render the "HD Converter" secondary entry in the bottom bar
    * (§11.3.2: present only when upscaling is possible; a fully-clamped
    * photo's entry is ABSENT, never disabled). The probe result is cached
    * per photo inside the converter, so re-opening a viewed photo is instant.
@@ -702,7 +712,7 @@ class PhotoDetailView {
     const save = document.createElement("button");
     save.type = "button";
     save.className = "btn-secondary detail__hd-entry";
-    save.textContent = "Save HD copy";
+    save.textContent = "HD Converter";
     save.addEventListener("click", () => this.#openHDPanel(max));
     // Insert before the primary download (§11.3.2: secondary beside it).
     this.#bottomEl.insertBefore(save, this.#downloadBtn);
@@ -741,20 +751,125 @@ class PhotoDetailView {
   }
 
   /**
-   * v0.3.0 preview: swap the stage image between the original file and the
-   * converted HD preview. previewURL=null restores the original. The
-   * preview URL is OWNED by the HDPanelView (it revokes it on re-preview/
-   * destroy) — this side only ever points an <img> at it.
+   * v0.4.1 BEFORE/AFTER WIPE (user request: "animation must be wipe slider
+   * — where is the animation of when the image transitions from blurry to
+   * clear"). Showing a preview requires NO download: the converted image
+   * layers over the original and an auto-sweep plays (all-Before →
+   * all-After → settle centred) so the blurry→clear transition ANIMATES;
+   * afterwards the divider is freely draggable (pointer or arrow keys).
+   * previewURL=null hides the layers and restores the plain original.
+   * The preview URL is OWNED by the HDPanelView (revoked on re-preview /
+   * destroy) — this side only points an <img> at it.
    */
   #showPreviewStage(previewURL) {
+    if (!this.#afterLayer) {
+      return;
+    }
+    for (const t of this.#wipeSweepTimers) {
+      clearTimeout(t);
+    }
+    this.#wipeSweepTimers = [];
+
     if (previewURL) {
       if (!this.#previewStageURL) {
-        this.#previewStageURL = this.#img.src; // remember the original
+        this.#previewStageURL = this.#img.src; // keep the original reference
       }
-      this.#img.src = previewURL;
-    } else if (this.#previewStageURL) {
-      this.#img.src = this.#previewStageURL;
+      this.#afterImg.src = previewURL;
+      this.#afterLayer.hidden = false;
+      this.#wipe.hidden = false;
+      this.#beforeLabel.hidden = false;
+      this.#afterLabel.hidden = false;
+      this.#stageEl.classList.add("is-comparing");
+      const reducedMotion =
+        typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reducedMotion) {
+        this.#setWipePos(50, { animate: false });
+      } else {
+        // The animated blurry→clear sweep, then a centred rest position.
+        this.#setWipePos(2, { animate: false });
+        this.#stageEl.classList.add("is-animating");
+        this.#wipeSweepTimers.push(
+          setTimeout(() => this.#setWipePos(98, { animate: true }), 60),
+          setTimeout(() => this.#setWipePos(50, { animate: true }), 1150),
+          setTimeout(() => this.#stageEl.classList.remove("is-animating"), 1800),
+        );
+      }
+    } else {
+      this.#afterLayer.hidden = true;
+      this.#afterImg.removeAttribute("src");
+      this.#wipe.hidden = true;
+      this.#beforeLabel.hidden = true;
+      this.#afterLabel.hidden = true;
+      this.#stageEl.classList.remove("is-comparing", "is-animating");
       this.#previewStageURL = null;
+    }
+  }
+
+  #setWipePos(pct, { animate = false } = {}) {
+    if (!this.#wipe) {
+      return;
+    }
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    this.#wipePos = clamped;
+    if (!animate) {
+      this.#stageEl.classList.remove("is-animating");
+    }
+    this.#afterLayer.style.clipPath = `inset(0 0 0 ${clamped}%)`;
+    this.#wipe.style.left = `${clamped}%`;
+    this.#wipe.setAttribute("aria-valuenow", String(clamped));
+  }
+
+  #onWipePointerDown(event) {
+    if (!this.#wipe || this.#wipe.hidden) {
+      return;
+    }
+    this.#wipeDragging = true;
+    this.#stageEl.classList.remove("is-animating"); // dragging is instant
+    try {
+      this.#stageEl.setPointerCapture(event.pointerId);
+    } catch {
+      /* capture unsupported — the pointermove handler still tracks */
+    }
+    this.#updateWipeFromClientX(event.clientX);
+    event.preventDefault();
+  }
+
+  #onWipePointerMove(event) {
+    if (!this.#wipeDragging || !this.#wipe || this.#wipe.hidden) {
+      return;
+    }
+    this.#updateWipeFromClientX(event.clientX);
+  }
+
+  #onWipePointerUp() {
+    this.#wipeDragging = false;
+  }
+
+  #updateWipeFromClientX(clientX) {
+    const rect = this.#stageEl.getBoundingClientRect();
+    if (!rect.width) {
+      return;
+    }
+    this.#setWipePos(((clientX - rect.left) / rect.width) * 100);
+  }
+
+  /** Arrow keys move the divider 5% (the handle is a real ARIA slider). */
+  #onWipeKeydown(event) {
+    const step = event.shiftKey ? 20 : 5;
+    let next = null;
+    if (event.key === "ArrowLeft") {
+      next = this.#wipePos - step;
+    } else if (event.key === "ArrowRight") {
+      next = this.#wipePos + step;
+    } else if (event.key === "Home") {
+      next = 0;
+    } else if (event.key === "End") {
+      next = 100;
+    }
+    if (next !== null) {
+      event.preventDefault();
+      event.stopPropagation(); // arrows belong to the divider, not the dialog
+      this.#setWipePos(next);
     }
   }
 
@@ -765,7 +880,7 @@ class PhotoDetailView {
     this.#hdPanel?.destroy();
     this.#hdPanel = null;
     this.#restoreDownloadRole();
-    // Cancel returns focus to "Save HD copy" (§11.3.2 focus rule).
+    // Cancel returns focus to "HD Converter" (§11.3.2 focus rule).
     this.#saveHdBtn?.focus({ preventScroll: true });
   }
 
@@ -872,8 +987,55 @@ class PhotoDetailView {
     img.className = "detail__img";
     img.alt = ""; // the filename is announced by the dialog label
     stage.appendChild(img);
-    stageWrap.appendChild(stage);
     this.#img = img;
+
+    /* v0.4.1 BEFORE/AFTER WIPE (user request): when a converter preview
+       exists, the stage layers the converted image OVER the original,
+       clipped from the divider position rightward — drag the divider (or
+       use the arrow keys) to wipe between the blurry BEFORE (left) and the
+       clear AFTER (right). Created lazily by #showPreviewStage; absent
+       entirely until a preview exists (no download required to see it). */
+    const afterLayer = document.createElement("div");
+    afterLayer.className = "detail__after";
+    afterLayer.hidden = true;
+    const afterImg = document.createElement("img");
+    afterImg.className = "detail__img";
+    afterImg.alt = "";
+    afterLayer.appendChild(afterImg);
+    stage.appendChild(afterLayer);
+    this.#afterLayer = afterLayer;
+    this.#afterImg = afterImg;
+
+    const wipe = document.createElement("button");
+    wipe.type = "button";
+    wipe.className = "detail__wipe";
+    wipe.hidden = true;
+    wipe.setAttribute("role", "slider");
+    wipe.setAttribute("aria-label", "Before and after comparison");
+    wipe.setAttribute("aria-valuemin", "0");
+    wipe.setAttribute("aria-valuemax", "100");
+    wipe.setAttribute("aria-valuenow", "50");
+    const wipeHandle = document.createElement("span");
+    wipeHandle.className = "detail__wipe-handle";
+    wipeHandle.setAttribute("aria-hidden", "true");
+    wipe.appendChild(wipeHandle);
+    stage.appendChild(wipe);
+    this.#wipe = wipe;
+
+    const beforeLabel = document.createElement("span");
+    beforeLabel.className = "detail__wipe-label detail__wipe-label--before";
+    beforeLabel.textContent = "Before";
+    beforeLabel.hidden = true;
+    const afterLabel = document.createElement("span");
+    afterLabel.className = "detail__wipe-label detail__wipe-label--after";
+    afterLabel.textContent = "After";
+    afterLabel.hidden = true;
+    stage.append(beforeLabel, afterLabel);
+    this.#beforeLabel = beforeLabel;
+    this.#afterLabel = afterLabel;
+
+    stageWrap.appendChild(stage);
+    this.#stageEl = stage;
 
     const next = document.createElement("button");
     next.type = "button";
@@ -885,8 +1047,20 @@ class PhotoDetailView {
     this.#nextBtn = next;
 
     // §9d: swipe left/right navigates, swipe down closes (mobile).
+    // v0.4.1: while the before/after wipe is showing, the stage drags the
+    // divider instead of navigating (gated in the handlers).
     stage.addEventListener("touchstart", (event) => this.#onTouchStart(event), { passive: true });
     stage.addEventListener("touchend", (event) => this.#onTouchEnd(event), { passive: true });
+
+    /* v0.4.1 divider interaction: drag anywhere on the stage, or use the
+       divider handle's arrow keys. Pointer capture keeps the drag alive
+       outside the stage bounds; touch-action is disabled via
+       .is-comparing so vertical scrolling never fights the drag. */
+    stage.addEventListener("pointerdown", (event) => this.#onWipePointerDown(event));
+    stage.addEventListener("pointermove", (event) => this.#onWipePointerMove(event));
+    stage.addEventListener("pointerup", (event) => this.#onWipePointerUp(event));
+    stage.addEventListener("pointercancel", (event) => this.#onWipePointerUp(event));
+    wipe.addEventListener("keydown", (event) => this.#onWipeKeydown(event));
 
     panel.appendChild(stageWrap);
 
@@ -997,7 +1171,9 @@ class PhotoDetailView {
     this.#photo = photo;
     // The converter entry and panel belong to the photo they were built
     // for (§11.3.2): a navigation resets both and re-probes — the probe
-    // cache inside the converter makes re-visits instant.
+    // cache inside the converter makes re-visits instant. v0.4.1: the
+    // before/after wipe resets too (its preview belongs to the old photo).
+    this.#showPreviewStage(null);
     this.#hdPanel?.destroy();
     this.#hdPanel = null;
     this.#restoreDownloadRole();
@@ -1112,6 +1288,13 @@ class PhotoDetailView {
   #onPanelKeydown(event) {
     if (event.key === "Escape") {
       event.preventDefault();
+      // v0.4.1: layered surfaces — Escape closes the INNERMOST open
+      // surface first: the converter panel when it is open (even if focus
+      // sits on the stage/wipe), then the detail view itself.
+      if (this.#hdPanel) {
+        this.#closeHDPanel();
+        return;
+      }
       this.close();
       return;
     }
@@ -1150,11 +1333,17 @@ class PhotoDetailView {
   }
 
   #onTouchStart(event) {
+    if (this.#wipe && !this.#wipe.hidden) {
+      return; // v0.4.1: the stage drags the wipe divider, not the gallery
+    }
     const touch = event.touches[0];
     this.#touchStart = touch ? { x: touch.clientX, y: touch.clientY } : null;
   }
 
   #onTouchEnd(event) {
+    if (this.#wipe && !this.#wipe.hidden) {
+      return; // v0.4.1: wipe mode — never navigate or close on a drag
+    }
     const start = this.#touchStart;
     this.#touchStart = null;
     if (!start) {
@@ -1252,24 +1441,25 @@ function readStaggerMs() {
    ====================================================================== */
 
 const HD_PANEL_COPY = {
-  heading: "Create an HD copy",
+  heading: "HD Converter",
   cancel: "Cancel",
   apply: "Create preview",
   applyBusy: "Upscaling…",
   helper: "Pick a larger size to save a copy.",
   honesty: "Upscaled — enlarged, same captured detail.",
-  scope: "Preview first — nothing is saved until you choose Download. A downloaded copy is scored fresh and joins the review next to its original.",
+  scope: "Drag the divider to compare before and after — nothing is saved until you choose. The improved copy can join your review without downloading.",
   clampNote: (max) => `This browser supports up to ${max}× for this photo.`,
-  previewBadge: "HD preview",
-  showOriginal: "Show original",
-  showPreview: "Show HD preview",
+  previewBadge: "HD preview — drag the divider",
   downloadPreview: "Download HD copy",
+  keepPreview: "Keep in review",
   discardPreview: "Discard",
   done: (name) => `Saved ${name}. The HD copy was added to the review with its own score.`,
+  doneKeep: "Added to the review with its own score — no download needed.",
   failed: "Couldn't upscale this photo. Nothing was changed.",
   retry: "Try again",
-  announcePreview: (width, height) => `HD preview ready — ${width} × ${height}. Choose Download or Discard.`,
+  announcePreview: (width, height) => `HD preview ready — ${width} × ${height}. Drag the divider to compare, then keep, download, or discard.`,
   announceDownloaded: (name) => `${name} saved and added to the review.`,
+  announceKept: "Improved copy kept in the review.",
 };
 
 const FACTOR_LABEL = (factor) => `${factor}×`;
@@ -1290,6 +1480,7 @@ class HDPanelView {
   #previewURL = null; // object URL of the converted preview (revoked on teardown)
   #previewBlob = null;
   #previewName = null;
+  #previewApplied = false; // one-shot: Keep/Download apply exactly once per preview
 
   #el = null;
   #slider = null;
@@ -1477,15 +1668,20 @@ class HDPanelView {
     el.appendChild(status);
     this.#statusEl = status;
 
-    // v0.3.0 preview action row: after a successful conversion the user
-    // sees the result on the stage and chooses Download or Discard here —
-    // "user can see the result first if it's worth downloadable".
+    // v0.4.1 preview action row (user request): Keep in review works with
+    // NO download — the improved copy is scored and joins the review; the
+    // download stays available as an option; Discard throws it away.
     const previewActions = document.createElement("div");
     previewActions.className = "hd-preview__actions";
     previewActions.hidden = true;
+    const keepPreview = document.createElement("button");
+    keepPreview.type = "button";
+    keepPreview.className = "btn-primary";
+    keepPreview.textContent = HD_PANEL_COPY.keepPreview;
+    keepPreview.addEventListener("click", () => this.#keepPreview());
     const downloadPreview = document.createElement("button");
     downloadPreview.type = "button";
-    downloadPreview.className = "btn-primary";
+    downloadPreview.className = "btn-secondary";
     downloadPreview.textContent = HD_PANEL_COPY.downloadPreview;
     downloadPreview.addEventListener("click", () => this.#downloadPreview());
     const discardPreview = document.createElement("button");
@@ -1493,7 +1689,7 @@ class HDPanelView {
     discardPreview.className = "btn-secondary";
     discardPreview.textContent = HD_PANEL_COPY.discardPreview;
     discardPreview.addEventListener("click", () => this.#discardPreview());
-    previewActions.append(downloadPreview, discardPreview);
+    previewActions.append(keepPreview, downloadPreview, discardPreview);
     el.appendChild(previewActions);
     this.#previewActions = previewActions;
 
@@ -1602,6 +1798,7 @@ class HDPanelView {
       this.#previewBlob = result.blob;
       this.#previewName = result.name;
       this.#previewURL = URL.createObjectURL(result.blob);
+      this.#previewApplied = false; // a fresh preview re-arms Keep/Download
       this.#onPreview?.({ previewURL: this.#previewURL });
       this.#previewActions.hidden = false;
       this.#setStatus({ text: HD_PANEL_COPY.previewBadge });
@@ -1625,9 +1822,10 @@ class HDPanelView {
   /** v0.3.0: save the previewed copy — and it joins the review with its
    *  own fresh score (the auto-reband flow lives in App.addHDToReview). */
   #downloadPreview() {
-    if (!this.#previewBlob || !this.#previewName) {
+    if (this.#previewApplied || !this.#previewBlob || !this.#previewName) {
       return;
     }
+    this.#previewApplied = true;
     triggerAnchorBlobDownload(this.#previewBlob, this.#previewName);
     this.#onAddHD?.(this.#previewBlob, this.#previewName);
     this.#onAnnounce?.(HD_PANEL_COPY.announceDownloaded(this.#previewName));
@@ -1635,6 +1833,22 @@ class HDPanelView {
     this.#previewActions.hidden = true;
     // The copy is saved; the preview stays on the stage until the panel
     // closes (the user may want to compare it once more).
+  }
+
+  /**
+   * v0.4.1 (user request: "you don't need to download in order to see the
+   * animation slider"): apply the previewed copy to the REVIEW with no
+   * download at all — it is scored fresh and joins the band it earns.
+   */
+  #keepPreview() {
+    if (this.#previewApplied || !this.#previewBlob || !this.#previewName) {
+      return;
+    }
+    this.#previewApplied = true;
+    this.#onAddHD?.(this.#previewBlob, this.#previewName);
+    this.#onAnnounce?.(HD_PANEL_COPY.announceKept);
+    this.#setStatus({ text: HD_PANEL_COPY.doneKeep });
+    this.#previewActions.hidden = true;
   }
 
   /** v0.3.0: throw the preview away — restore the original on the stage. */

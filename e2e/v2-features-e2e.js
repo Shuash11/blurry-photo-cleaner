@@ -86,7 +86,7 @@ try {
 
     await page.locator(".band--sharp .tile__meta-btn").first().click();
     await page.waitForSelector(".detail__panel", { timeout: 5000 });
-    await page.getByRole("button", { name: "Save HD copy" }).click();
+    await page.getByRole("button", { name: "HD Converter" }).click();
     await page.waitForSelector(".hd-panel", { timeout: 5000 });
 
     // §11.4 animation contract on the Output value (computed styles).
@@ -289,7 +289,7 @@ try {
     await page.setInputFiles("#file-input", [FIX("fixture-sharp-text.png")]);
     await page.waitForSelector(".results", { timeout: 20000 });
     await page.locator(".band--sharp .tile__meta-btn").first().click();
-    await page.getByRole("button", { name: "Save HD copy" }).click();
+    await page.getByRole("button", { name: "HD Converter" }).click();
     await page.waitForSelector(".hd-panel", { timeout: 5000 });
     const rm = await page.evaluate(() => {
       const el = document.querySelector(".hd-readout__line") ?? document.querySelector("[class*='readout']");

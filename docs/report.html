@@ -57,7 +57,7 @@
         <tr>
           <td>Selected photo files &mdash; picked with the file picker, dragged onto the page, or chosen from a folder (when the browser supports it). The files stay on the device.</td>
           <td>Each photo is analyzed in a background Web Worker: decode upright, downscale to a 256-pixel working image, convert to grayscale, measure Laplacian variance (edge energy), and normalize the result to a 0&ndash;100 sharpness score. The score is cut into three bands &mdash; under 40 Blurry, 40&ndash;59 Needs review, 60+ Sharp &mdash; and shown as &ldquo;NN% sharp&rdquo; on every tile. Blurry photos are also marked <em>Suggested</em> for deletion. On request, a pool of workers resamples photos to a larger size, optionally sharpens them (a real contrast pass), and encodes PNG, JPEG, or WebP &mdash; you preview the result first, and a copy you download is scored fresh and joins the review at the band it belongs to. Batches convert in parallel (25 photos in about 9 seconds in testing).</td>
-          <td>A review grid grouped into the three bands, with counts and an &ldquo;NN% sharp&rdquo; chip on every tile. One tap selects the <em>keepers</em> (every Sharp photo plus the Needs-review photos already ticked). Downloads ask for a format (Original, PNG, JPEG, WebP); HD copies are previewed before saving and are re-scored on download. Photos are removed from the review session after a confirmation dialog &mdash; then deleted on the phone in the gallery app.</td>
+          <td>A review grid grouped into the three bands, with counts and an &ldquo;NN% sharp&rdquo; chip on every tile. One tap selects the <em>keepers</em> (every Sharp photo plus the Needs-review photos already ticked). Downloads ask for a format (Original, PNG, JPEG, WebP). The HD Converter shows a before/after <em>wipe slider</em> that animates blurry → clear; the improved copy can be kept in the review with no download at all, and it is re-scored into the band it earns. Photos are removed from the review session after a confirmation dialog &mdash; then deleted on the phone in the gallery app.</td>
         </tr>
       </tbody>
     </table>
@@ -85,8 +85,8 @@
     </figure>
 
     <figure>
-      <img src="assets/screenshot-4-hd-converter.png" alt="Detail view of one photo with the HD converter panel open: a size slider at 2×, a sharpening choice set to High, a format choice set to JPEG, and a readout showing the original 480 × 480 resolution sliding to the new 960 × 960 resolution.">
-      <figcaption><span class="fig-label">Figure 5.</span> The HD converter: choose a size, a sharpening level, and an export format; the readout slides from the old resolution to the new one. You always see the result on the stage first and choose Download or Discard &mdash; nothing is saved until you decide. A downloaded copy is scored fresh and joins the review at the sharpness level it actually earns.</figcaption>
+      <img src="assets/screenshot-4-hd-converter.png" alt="Detail view of one photo with the HD Converter panel open: a before/after wipe slider on the stage — the blurry original on the left of the divider and the sharpened result on the right — plus a size slider at 2×, sharpening set to High, format set to JPEG, and Keep in review / Download / Discard actions.">
+      <figcaption><span class="fig-label">Figure 5.</span> The HD Converter: choose a size, a sharpening level, and a format, then <em>Create preview</em> &mdash; the before/after <strong>wipe slider</strong> appears on the stage and auto-sweeps from blurry to clear; drag the divider to compare. No download is needed: <em>Keep in review</em> adds the improved copy to the review with a fresh score, and it lands in the band it earns (a 36% Blurry original becomes a 54% Needs-review copy in testing).</figcaption>
     </figure>
 
     <figure>

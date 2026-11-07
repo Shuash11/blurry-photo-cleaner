@@ -362,6 +362,13 @@ export class ReviewControls {
       this.#downloadLabel.textContent = "Preparing…";
       this.#spinner.hidden = false;
     }
+    // Race fix (2026-11-07): a pending selection debounce ("N selected")
+    // could fire AFTER the busy announce and clobber the live region.
+    // The busy state supersedes it.
+    if (this.#selectionAnnounceTimer !== null) {
+      clearTimeout(this.#selectionAnnounceTimer);
+      this.#selectionAnnounceTimer = null;
+    }
     // §12: download status through the polite live region.
     const n = photos.length;
     this.#announce?.(`Preparing ${n} ${n === 1 ? "photo" : "photos"}`);
