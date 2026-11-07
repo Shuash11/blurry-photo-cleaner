@@ -10,51 +10,56 @@
    Design tokens — color/depth/motion (design-spec-v2 §4.7 drop-in block)
    -------------------------------------------------------------------------- */
 :root {
-  /* §4.1 — surfaces (the cool-neutral ladder) */
-  --color-bg: #F2F3F5;
-  --color-surface: #FFFFFF;
-  --color-surface-muted: #EEF1F4;
-  --color-fill-pressed: #E1E5EA;
+  /* §4.1 — surfaces (v0.4.0 DARK GREY theme, user directive 2026-11-07:
+     "dark grey modern style" — a cool near-black ladder in the same
+     Apple-dark system family). */
+  --color-bg: #141517;
+  --color-surface: #1C1E21;
+  --color-surface-muted: #26282C;
+  --color-fill-pressed: #2F3237;
 
-  /* §4.1 — text ramp */
-  --color-text: #16191E;
-  --color-text-secondary: #57606C;
-  --color-text-muted: #646E7B;
+  /* §4.1 — text ramp (light ink on the dark ladder; all pairs ≥4.5:1 —
+     verified by e2e/probe-dark-contrast) */
+  --color-text: #F2F3F5;
+  --color-text-secondary: #A9B1BC;
+  --color-text-muted: #8A919C;
 
-  /* §4.5 — structure */
-  --color-hairline: rgba(22, 25, 31, 0.10);
-  --color-separator-strong: rgba(22, 25, 31, 0.16);
-  --color-hover-overlay: rgba(22, 25, 31, 0.05);
-  --color-track: rgba(22, 25, 31, 0.06);          /* progress-bar track (was inline) */
+  /* §4.5 — structure (white-alpha hairlines over dark glass) */
+  --color-hairline: rgba(255, 255, 255, 0.12);
+  --color-separator-strong: rgba(255, 255, 255, 0.20);
+  --color-hover-overlay: rgba(255, 255, 255, 0.06);
+  --color-track: rgba(255, 255, 255, 0.10);       /* progress-bar track */
 
-  /* §4.2 — accent: ONE token does fill + text on every surface (v1's
-     accent-strong/accent-text pair and its surface rule are retired). */
-  --color-accent: #2E5C95;
-  --color-accent-hover: #366399;                  /* primary fill on hover (pointer devices) */
-  --color-accent-press: #275084;
-  --color-accent-subtle: rgba(46, 92, 149, 0.10);
+  /* §4.2 — accent (dark edition): a mid steel blue fills primaries (white
+     label ≥4.5) while --color-accent-text carries accent TEXT on the dark
+     ladder (one fill token cannot be light enough for dark text use AND
+     dark enough for a white label — the v1 two-token architecture returns,
+     dark-face). */
+  --color-accent: #3D74B8;
+  --color-accent-hover: #4277BC;                  /* primary fill on hover (pointer devices) */
+  --color-accent-press: #3567A6;
+  --color-accent-subtle: rgba(109, 159, 216, 0.16);
+  --color-accent-text: #82B4EC;                   /* accent-colored text/links on dark surfaces */
+  --color-on-accent: #FFFFFF;                     /* labels/icons ON an accent fill (white in both themes) */
 
-  /* §4.3 — band colors (values unchanged from v1; re-certified on v2
-     composites). Band TEXT on tints or the grouped background uses
-     --color-band-*-text (§4.3 rule): the base text values are certified on
-     white only and fail on the tinted chip composite. */
+  /* §4.3 — band colors (dark-face editions): the light-surface text values
+     fail on the dark ladder, so the band TEXT tokens reuse the certified
+     stage variants' family (≥4.5:1 on bg/surface/tints — verified). */
   --color-band-blurry: #E9152D;
   --color-band-review: #C55300;
   --color-band-sharp: #008932;
-  --color-band-blurry-text: #BB1125;
-  --color-band-review-text: #A34400;
-  --color-band-sharp-text: #007029;
-  --color-band-blurry-tint: rgba(233, 21, 45, 0.10);
-  --color-band-review-tint: rgba(197, 83, 0, 0.10);
-  --color-band-sharp-tint: rgba(0, 137, 50, 0.10);
+  --color-band-blurry-text: #FF6B6E;
+  --color-band-review-text: #FFB25C;
+  --color-band-sharp-text: #5BD97E;
+  --color-band-blurry-tint: rgba(233, 21, 45, 0.16);
+  --color-band-review-tint: rgba(255, 178, 92, 0.14);
+  --color-band-sharp-tint: rgba(91, 217, 126, 0.14);
 
-  /* §4.4 — media stage and overlays (detail view) */
-  --color-stage: #14171C;
+  /* §4.4 — media stage and overlays (detail view; deeper than the app) */
+  --color-stage: #0E1013;
   --color-stage-text: #FFFFFF;
-  --color-scrim: rgba(11, 14, 19, 0.44);
-  /* Stage band tokens: the light-appearance band text values fail contrast
-     on the dark stage, so the detail chip uses these dark-mode HIG variants
-     (re-certified on the v2 stage, §4.4/§4.9 pairs 30–32). Stage-only. */
+  --color-scrim: rgba(0, 0, 0, 0.60);
+  /* Stage band tokens (unchanged — already certified dark variants). */
   --color-band-blurry-stage: #FF4245;
   --color-band-review-stage: #FFA056;
   --color-band-sharp-stage: #4AD968;
@@ -99,8 +104,8 @@
   --radius-full: 999px;
 
   /* §4.5 — depth */
-  --shadow-card: 0 1px 2px rgba(15, 18, 24, 0.06);
-  --shadow-floating: 0 8px 24px rgba(15, 18, 24, 0.08);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-floating: 0 8px 24px rgba(0, 0, 0, 0.60);
 
   /* --------------------------------------------------------------------------
      Design tokens — motion (§4.6; v1 §6 durations and the allowed-motion
@@ -170,7 +175,7 @@ img {
 .icon--mark {
   width: 16px;
   height: 16px;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .visually-hidden {
@@ -195,7 +200,7 @@ img {
 
 /* Single visible focus style (§12): :focus-visible only, never on pointer clicks. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-accent-text); /* bright ring reads on the dark ladder */
   outline-offset: 2px;
 }
 
@@ -212,7 +217,7 @@ img {
   gap: var(--space-16);
   min-height: var(--header-h);
   padding: var(--space-8) var(--page-pad);
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(28, 30, 33, 0.80); /* dark glass (v0.4.0 dark theme) */
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--color-hairline);
@@ -266,7 +271,7 @@ img {
 
 .btn-primary {
   background: var(--color-accent);
-  color: var(--color-surface);
+  color: var(--color-on-accent);
 }
 
 @media (hover: hover) {
@@ -321,7 +326,7 @@ img {
   line-height: var(--line-headline);
   letter-spacing: var(--track-headline);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   cursor: pointer;
   transition: opacity var(--duration-fast) var(--ease-standard);
 }
@@ -734,7 +739,7 @@ img {
   width: 100%;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-accent-text);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform var(--duration-standard) var(--ease-standard);
@@ -914,7 +919,7 @@ img {
   height: 20px;
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  color: var(--color-surface);
+  color: var(--color-on-accent);
   pointer-events: none; /* the badge is not a separate target (§12) */
 }
 
@@ -1047,6 +1052,8 @@ img {
   margin: var(--space-4) 0;
   background: var(--color-hairline);
 }
+
+.action-bar__summary {
   margin: 0;
   font-size: var(--text-footnote);
   line-height: var(--line-footnote);
@@ -1057,7 +1064,13 @@ img {
 
 .action-bar__actions {
   display: flex;
-  gap: var(--space-12);
+  /* Bug fix (2026-11-07): five actions in one row overflow the 375px
+     viewport (Download selected landed off-screen and untappable). Wrap on
+     narrow widths, right-aligned; the bar's ResizeObserver feeds the real
+     height to --action-bar-h so the grid clearance tracks it. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-8) var(--space-12);
 }
 
 .action-bar__actions .btn-primary {
@@ -1366,7 +1379,7 @@ img {
    the card fill (§12 ring rule is a stage rule, not a card rule). */
 .hd-panel :focus-visible,
 .hd-dialog :focus-visible {
-  outline-color: var(--color-accent);
+  outline-color: var(--color-accent-text);
 }
 
 /* --------------------------------------------------------------------------
@@ -1504,8 +1517,8 @@ img {
   border-radius: var(--radius-full);
   background: linear-gradient(
     to right,
-    var(--color-accent) 0%,
-    var(--color-accent) var(--hd-fill, 0%),
+    var(--color-accent-text) 0%,
+    var(--color-accent-text) var(--hd-fill, 0%),
     var(--color-fill-pressed) var(--hd-fill, 0%),
     var(--color-fill-pressed) 100%
   );
@@ -1530,7 +1543,7 @@ img {
 .hd-slider__input::-moz-range-progress {
   height: 4px;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-accent-text);
 }
 
 .hd-slider__input::-moz-range-thumb {
@@ -1683,7 +1696,7 @@ img {
   width: 100%;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-accent-text);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform var(--duration-standard) var(--ease-standard);
@@ -2060,7 +2073,7 @@ img {
 
 .choice-row__input:checked + .choice-row__pill {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   background: var(--color-accent-subtle);
 }
 

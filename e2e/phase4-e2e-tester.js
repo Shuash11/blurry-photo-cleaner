@@ -27,7 +27,7 @@
  *   P3  Score chips (F1/F2; R4 re-scope 2026-11-06 — design-spec-v2 §11.2):
  *       every scored tile's chip reads "NN% sharp", identity-mapped from its
  *       store score, and its computed color equals the --color-band-*-text
- *       token (#BB1125 / #A34400 / #007029); band chip headings use the same
+ *       token (#FF6B6E / #FFB25C / #5BD97E); band chip headings use the same
  *       tokens.
  *   P4  Selection: single-tile toggle (aria-pressed + ring + check badge),
  *       band Select all / Deselect, action-bar summary "N selected · M total"
@@ -54,7 +54,7 @@
  *       PNG produces the analysis-skip notice + a trailing Skipped section
  *       (only when present), excluded from the three band counts.
  *   P9  Contrast regression (computed): band chips ≥ 4.5:1 on their tint
- *       composite; score chips ≥ 4.5:1 on #F2F2F7 (and on their composite).
+ *       composite; score chips ≥ 4.5:1 on #141517 (and on their composite).
  *   P10 Hygiene + responsiveness: zero console errors/warnings/pageerrors/
  *       failed requests / HTTP>=400 across every state; every network request
  *       same-origin (client-only app — no backend API by design); 375px zero
@@ -95,12 +95,12 @@ const MOBILE_VIEWPORT = { width: 375, height: 812 };
 /* Phase 4 fix F1/F2 tokens (§3.3): band text on tints / the grouped
    background. These are the exact values the chips must compute to. */
 const BAND_TOKENS = {
-  blurry: { hex: "#BB1125", css: "rgb(187, 17, 37)", rgb: [187, 17, 37] },
-  review: { hex: "#A34400", css: "rgb(163, 68, 0)", rgb: [163, 68, 0] },
-  sharp: { hex: "#007029", css: "rgb(0, 112, 41)", rgb: [0, 112, 41] },
+  blurry: { hex: "#FF6B6E", css: "rgb(255, 107, 110)", rgb: [255, 107, 110] },
+  review: { hex: "#FFB25C", css: "rgb(255, 178, 92)", rgb: [255, 178, 92] },
+  sharp: { hex: "#5BD97E", css: "rgb(91, 217, 126)", rgb: [91, 217, 126] },
 };
 const BAND_LABELS = { blurry: "Blurry", review: "Needs review", sharp: "Sharp" };
-const GROUPED_BG = [242, 242, 247]; // #F2F2F7 — §3.1 grouped background (delegated contrast target)
+const GROUPED_BG = [20, 21, 23]; // #141517 — §3.1 grouped background (delegated contrast target)
 
 /* ------------------------------------------------------------------ */
 /* Run state                                                           */
@@ -1446,7 +1446,7 @@ async function stateP9({ page, context }) {
     evidence.push(`chip ${id} ${ratio.toFixed(2)}:1`);
   }
 
-  // F2: every score chip — token vs #F2F2F7 (delegated target) and vs composite.
+  // F2: every score chip — token vs #141517 (delegated target) and vs composite.
   const state = await debugState(page);
   const byName = new Map(state.photos.map((p) => [p.name, p]));
   let checked = 0;
@@ -1461,9 +1461,9 @@ async function stateP9({ page, context }) {
       assert(sample.fgRaw === BAND_TOKENS[photo.band].css, `chip ${name} color ${sample.fgRaw}`);
       const onGrouped = contrastRatio(toRGB(sample.fg), GROUPED_BG);
       const onComposite = contrastRatio(toRGB(sample.fg), sample.bg);
-      assert(onGrouped >= 4.5, `score chip ${name}: ${onGrouped.toFixed(2)}:1 on #F2F2F7 < 4.5:1`);
+      assert(onGrouped >= 4.5, `score chip ${name}: ${onGrouped.toFixed(2)}:1 on #141517 < 4.5:1`);
       assert(onComposite >= 4.5, `score chip ${name}: ${onComposite.toFixed(2)}:1 on composite rgb(${sample.bg.map(Math.round)}) < 4.5:1`);
-      evidence.push(`${name} ${onGrouped.toFixed(2)}:1/#F2F2F7`);
+      evidence.push(`${name} ${onGrouped.toFixed(2)}:1/#141517`);
       checked += 1;
     }
   }
@@ -1753,7 +1753,7 @@ async function stateP10({ page }) {
     await runState("P8", "Mixed batch: invalid in notice, counts exclude skipped; transparent → Skipped section only when present", stateP8);
 
     console.log(`\n--- P9: contrast regression ---`);
-    await runState("P9", "Contrast (computed): band chips ≥4.5:1 on tint composite; score chips ≥4.5:1 on #F2F2F7", stateP9);
+    await runState("P9", "Contrast (computed): band chips ≥4.5:1 on tint composite; score chips ≥4.5:1 on #141517", stateP9);
 
     console.log(`\n--- P11: Phase 2/3 core regression quick pass ---`);
     await runState("P11", "Phase 2/3 quick pass: empty, 1 photo, invalid notice, start-over + revocation, determinism", stateP11);

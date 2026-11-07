@@ -80,6 +80,7 @@ jobs:
             "/js/DeleteConfirmDialog.js"
             "/assets/mark.svg"
             "/docs/report.html"
+            "/docs/report.docx"
             "/docs/report.css"
             "/docs/assets/figure1-system-flow.svg"
             "/docs/assets/screenshot-1-empty.png"

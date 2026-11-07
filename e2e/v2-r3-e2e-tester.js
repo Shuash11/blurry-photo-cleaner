@@ -25,7 +25,7 @@
  *   R3-2  Visual tokens (programmatic): body bg rgb(242,243,245); accent fill
  *         rgb(46,92,149); focus ring 2px rgb(46,92,149) offset 2 on light and
  *         white on stage; radii tokens ∈ {8,12,18,999} and rendered radii in
- *         the spec set; theme-color meta #F2F3F5.
+ *         the spec set; theme-color meta #141517.
  *   R3-3  Scoring identity through the real picker: fixtures → 100/96 sharp,
  *         34/36 blurry, byte-identical on re-run; rendered chips == store.
  *   R3-4  Pointer-gated density: coarse (hasTouch) 375 + 810 → every visible
@@ -79,12 +79,13 @@ const DESKTOP = { width: 1280, height: 800 };
 
 /* v2 spec values under test (design-spec-v2 §4.7 drop-in block) */
 const V2 = {
-  bg: "rgb(242, 243, 245)",          // --color-bg #F2F3F5
-  accent: "rgb(46, 92, 149)",        // --color-accent #2E5C95
-  mutedFill: "rgb(238, 241, 244)",   // --color-surface-muted #EEF1F4
-  mutedText: "rgb(100, 110, 123)",   // --color-text-muted #646E7B
-  text: "rgb(22, 25, 30)",           // --color-text #16191E
-  accentSubtle: "rgba(46, 92, 149, 0.1)",
+  bg: "rgb(20, 21, 23)",          // --color-bg #141517 (v0.4.0 dark)
+  accent: "rgb(61, 116, 184)",    // --color-accent #3D74B8 (fill)
+  accentText: "rgb(130, 180, 236)", // --color-accent-text #82B4EC (ring/text on dark)
+  mutedFill: "rgb(38, 40, 44)",   // --color-surface-muted #26282C
+  mutedText: "rgb(138, 145, 156)", // --color-text-muted #8A919C
+  text: "rgb(242, 243, 245)",     // --color-text #F2F3F5
+  accentSubtle: "rgba(109, 159, 216, 0.16)",
 };
 
 /* ------------------------------------------------------------------ */
@@ -727,7 +728,7 @@ async function stateR3_2({ page }) {
     };
   });
   assert(surface.body === V2.bg, `body background ${surface.body}, expected ${V2.bg} (§4.1 --color-bg)`);
-  assert(surface.themeColor === "#F2F3F5", `theme-color meta "${surface.themeColor}", expected #F2F3F5 (§4.8)`);
+  assert(surface.themeColor === "#141517", `theme-color meta "${surface.themeColor}", expected #141517 (§4.8)`);
 
   /* accent fill on the hero primary */
   const heroFill = await page.evaluate(() => getComputedStyle(document.querySelector(".btn-hero")).backgroundColor);
@@ -743,7 +744,7 @@ async function stateR3_2({ page }) {
   }
   assert(ctaRing, "keyboard: Tab never reached the hero CTA");
   assert(ringProblem(ctaRing) === null, `light focus ring problem: ${ringProblem(ctaRing)} (${JSON.stringify(ctaRing)})`);
-  assert(ctaRing.outlineColor === V2.accent, `light focus ring color ${ctaRing.outlineColor}, expected ${V2.accent} (§4.2)`);
+      assert(ctaRing.outlineColor === V2.accentText, `light focus ring color ${ctaRing.outlineColor}, expected ${V2.accentText} (§4.2 v0.4.0 ring = accent-text)`);
   assert(ctaRing.outlineWidth === "2px" && ctaRing.outlineOffset === "2px", `light focus ring ${ctaRing.outlineWidth}/${ctaRing.outlineOffset}, expected 2px/2px`);
   await shot(page, "08-tokens-empty.png");
 
@@ -759,7 +760,7 @@ async function stateR3_2({ page }) {
   /* the primary fill has a background-color transition from the disabled
      (surface-muted) fill — wait for the settled enabled accent value. */
   await page.waitForFunction(
-    () => getComputedStyle(document.querySelector(".action-bar__actions .btn-primary")).backgroundColor === "rgb(46, 92, 149)",
+    () => getComputedStyle(document.querySelector(".action-bar__actions .btn-primary")).backgroundColor === "rgb(61, 116, 184)",
     null,
     { timeout: STEP_TIMEOUT, polling: 25 },
   );

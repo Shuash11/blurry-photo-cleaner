@@ -29,7 +29,7 @@
  *   S11 contrast regression lock (F-1 fix; re-scoped for the Phase 4 §9c
  *       results screen and again for the v2 restyle, 2026-11-06) — "Start over"
  *       keeps the F-1 lock on the v2 single accent: computed color
- *       rgb(46,92,149) (--color-accent #2E5C95, design-spec-v2 §4.2/§4.7;
+ *       rgb(46,92,149) (--color-accent #3D74B8, design-spec-v2 §4.2/§4.7;
  *       the v1 rescue token --color-accent-text is retired per §4.8) and
  *       >= 4.5:1 at rest and scrolled over dark content. The "Add more" the
  *       F-1 fix originally locked was the PENDING-GRID text button; after
@@ -71,15 +71,15 @@ const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
 const MOBILE_VIEWPORT = { width: 375, height: 812 };
 
 // v2 restyle re-scope (design-spec-v2 §4.2/§4.7): the F-1 accent lock now
-// asserts the single v2 accent #2E5C95 (rgb 46,92,149); its v1 rescue token
+// asserts the single v2 accent #3D74B8 (rgb 46,92,149); its v1 rescue token
 // --color-accent-text (#0F4CBD) is retired with no successor (§4.8).
-const ACCENT_TEXT_STR = "rgb(46, 92, 149)"; // --color-accent #2E5C95 (v2)
-const ACCENT_TEXT_RGB = [46, 92, 149];
+const ACCENT_TEXT_STR = "rgb(130, 180, 236)"; // --color-accent-text #82B4EC (v0.4.0 dark: the "Start over" text token)
+const ACCENT_TEXT_RGB = [130, 180, 236];
 // §8.1 secondary button label (design-spec-v2 §4.1/§4.7 "Buttons": Secondary =
 // --color-surface-muted fill + --color-text #16191E label) — the results-screen
 // "Add more" after the Phase 4 §9c transition.
-const SECONDARY_TEXT_STR = "rgb(22, 25, 30)"; // --color-text #16191E (v2)
-const SECONDARY_TEXT_RGB = [22, 25, 30];
+const SECONDARY_TEXT_STR = "rgb(242, 243, 245)"; // --color-text #16191E (v2)
+const SECONDARY_TEXT_RGB = [242, 243, 245];
 const ALL_FAILED_MSG = "Couldn't open those files. Nothing was added."; // F-2 fix copy
 const STALE_MSG = "Gallery cleared."; // the stale message the F-2 defect showed
 const FAILED_BODY =
@@ -662,7 +662,7 @@ async function runState(id, name, fn) {
           /* v2 re-scope (design-spec-v2 §4.2/§4.8): drag-over fill is
              --color-accent-subtle rgba(46,92,149,0.10); v1's literal was
              rgba(0,136,255,0.10). */
-          () => getComputedStyle(document.querySelector("main")).backgroundColor === "rgba(46, 92, 149, 0.1)",
+          () => getComputedStyle(document.querySelector("main")).backgroundColor === "rgba(109, 159, 216, 0.16)",
           null,
           { timeout: STEP_TIMEOUT, polling: 60 },
         )
@@ -884,7 +884,7 @@ async function runState(id, name, fn) {
 
     /* ---------------- S11 — contrast regression lock (F-1) ---------------- */
 
-    await runState("S11", "Contrast lock: Start over v2 accent #2E5C95 + Add more §8.1 secondary, >=4.5:1 at rest + scrolled", async ({ page, context }) => {
+    await runState("S11", "Contrast lock: Start over v2 accent #3D74B8 + Add more §8.1 secondary, >=4.5:1 at rest + scrolled", async ({ page, context }) => {
       await context.addInitScript(INSTALL_SAMPLE);
       await page.goto(appUrl, { waitUntil: "load", timeout: STEP_TIMEOUT });
       await page.setInputFiles("#file-input", [asInput(FIX.sharpText), asInput(FIX.checker)], { timeout: STEP_TIMEOUT });
@@ -907,7 +907,7 @@ async function runState(id, name, fn) {
       const soRest = await sampleEl(startOver);
       // Phase 4 + v2 re-scope: "Add more" on results is the §8.1 secondary
       // button (--color-text #16191E); "Start over" carries the F-1 lock on
-      // the v2 single accent #2E5C95 (design-spec-v2 §4.2/§4.7).
+      // the v2 single accent #3D74B8 (design-spec-v2 §4.2/§4.7).
       assert(addRest.fgRaw === SECONDARY_TEXT_STR, `"Add more" color is ${addRest.fgRaw}, expected ${SECONDARY_TEXT_STR} (§8.1 secondary)`);
       assert(soRest.fgRaw === ACCENT_TEXT_STR, `"Start over" color is ${soRest.fgRaw}, expected ${ACCENT_TEXT_STR}`);
       const addRestRatio = contrastRatio(addRest.fg, addRest.bg);

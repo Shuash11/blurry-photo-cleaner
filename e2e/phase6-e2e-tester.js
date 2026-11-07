@@ -93,9 +93,9 @@ const DESKTOP_CONTEXT = { viewport: DESKTOP_VIEWPORT, acceptDownloads: true };
 
 /* Phase 6 F7 tokens (re-scoped to the v2 design-spec-v2 §4.7 block,
    2026-11-06): .btn-secondary:disabled — muted fill + muted label. */
-const DISABLED_BG = "rgb(238, 241, 244)";   // --color-surface-muted #EEF1F4 (v2; was #F2F2F7)
-const DISABLED_FG = "rgb(100, 110, 123)";   // --color-text-muted #646E7B (v2; was #6E6E73)
-const RING_LIGHT = "rgb(46, 92, 149)";      // --color-accent #2E5C95 (v2; v1 accent-strong #1E6EF4 merged per §4.8)
+const DISABLED_BG = "rgb(38, 40, 44)";   // --color-surface-muted #EEF1F4 (v2; was #141517)
+const DISABLED_FG = "rgb(138, 145, 156)";   // --color-text-muted #646E7B (v2; was #6E6E73)
+const RING_LIGHT = "rgb(130, 180, 236)";   // --color-accent-text #82B4EC (v0.4.0 dark ring)      // --color-accent #3D74B8 (v2; v1 accent-strong #1E6EF4 merged per §4.8)
 const RING_DARK = "rgb(255, 255, 255)";     // --color-stage-text (unchanged)
 
 /* ------------------------------------------------------------------ */
@@ -606,7 +606,7 @@ async function stateM1({ page, context }) {
         if (!btn || !btn.disabled) return null;
         const cs = getComputedStyle(btn);
         // v2 §4.7 values — must stay in sync with DISABLED_BG / DISABLED_FG above.
-        if (cs.backgroundColor !== "rgb(238, 241, 244)" || cs.color !== "rgb(100, 110, 123)") return null;
+        if (cs.backgroundColor !== "rgb(38, 40, 44)" || cs.color !== "rgb(138, 145, 156)") return null;
         return { bg: cs.backgroundColor, color: cs.color };
       },
       null,
