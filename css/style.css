@@ -1,90 +1,95 @@
 /* ==========================================================================
    Blurry Photo Cleaner — styles
-   Built to designs/design-spec-v2.md (v0.2.0 design of record, Phase R3
-   restyle); v1 sections it supersedes are listed in the v2 spec §1/§10.
-   Color/depth/motion tokens are the v2 set (§4); typography and spacing
-   carry from v1 unchanged (§4.7).
+   Built to designs/design-spec-v3.md (the v0.5 "premium dark glass" design
+   of record); supersedes the v2 token block (design-spec-v2.md §4). Tokens
+   are the v3 sheet (§2): the four-step surface ladder + white-alpha
+   hairlines, one indigo accent spent deliberately, semantic verdict bands,
+   glass only where content scrolls underneath (each glass surface keeps an
+   @supports solid fallback), and the motion set whose entrances all
+   collapse under the reduced-motion block (§7).
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   Design tokens — color/depth/motion (design-spec-v2 §4.7 drop-in block)
+   Design tokens — the v3 sheet (design-spec-v3 §2, full drop-in block)
    -------------------------------------------------------------------------- */
 :root {
-  /* §4.1 — surfaces (v0.4.0 DARK GREY theme, user directive 2026-11-07:
-     "dark grey modern style" — a cool near-black ladder in the same
-     Apple-dark system family). */
-  --color-bg: #141517;
-  --color-surface: #1C1E21;
-  --color-surface-muted: #26282C;
-  --color-fill-pressed: #2F3237;
+  /* §2 — surfaces ladder (deep cool near-black, Linear-class) */
+  --color-bg: #0A0B0D;              /* page; body adds the fixed radial glow (§3) */
+  --color-surface: #121418;         /* cards: notice, progress, hd-panel, tiles */
+  --color-surface-raised: #191C22;  /* badges, checked pills, floating bits */
+  --color-surface-muted: #1F232B;   /* control fill: btn-secondary, pills, fills */
+  --color-fill-pressed: #2A2F38;    /* hover/press of control fills */
 
-  /* §4.1 — text ramp (light ink on the dark ladder; all pairs ≥4.5:1 —
-     verified by e2e/probe-dark-contrast) */
-  --color-text: #F2F3F5;
-  --color-text-secondary: #A9B1BC;
-  --color-text-muted: #8A919C;
+  /* §2 — glass (always with an @supports fallback to --color-surface-raised) */
+  --glass-header: rgba(10, 12, 16, 0.82);   /* app header */
+  --glass-bar: rgba(10, 12, 16, 0.92);      /* action bar */
+  --glass-stage: rgba(10, 11, 13, 0.74);    /* detail top/bottom bars */
+  --glass-dialog: rgba(18, 20, 26, 0.86);   /* confirm / hd-dialog / export chooser */
+  --glass-card: rgba(18, 20, 26, 0.72);     /* empty-state card */
+  --glass-blur: 24px;
+  --glass-saturate: 140%;
 
-  /* §4.5 — structure (white-alpha hairlines over dark glass) */
-  --color-hairline: rgba(255, 255, 255, 0.12);
-  --color-separator-strong: rgba(255, 255, 255, 0.20);
+  /* §2 — text ramp (all pairs ≥4.5:1, §2.1) */
+  --color-text: #F5F6F7;
+  --color-text-secondary: #A6AFBC;
+  --color-text-muted: #818A97;      /* never on glass-stage/glass-dialog (§2.2) */
+
+  /* §2 — hairlines / overlays / edges */
+  --color-hairline: rgba(255, 255, 255, 0.08);
+  --color-separator-strong: rgba(255, 255, 255, 0.16);
   --color-hover-overlay: rgba(255, 255, 255, 0.06);
-  --color-track: rgba(255, 255, 255, 0.10);       /* progress-bar track */
+  --color-track: rgba(255, 255, 255, 0.10);             /* progress-bar track */
+  --edge-highlight: rgba(255, 255, 255, 0.06);          /* inset 0 1px 0 … top edge */
+  --color-veil: rgba(8, 10, 13, 0.66);                  /* wipe labels, chips over photos */
+  --color-on-light: #0A0B0D;                            /* ink on white (wipe chevrons, handle) */
 
-  /* §4.2 — accent (dark edition): a mid steel blue fills primaries (white
-     label ≥4.5) while --color-accent-text carries accent TEXT on the dark
-     ladder (one fill token cannot be light enough for dark text use AND
-     dark enough for a white label — the v1 two-token architecture returns,
-     dark-face). */
-  --color-accent: #3D74B8;
-  --color-accent-hover: #4277BC;                  /* primary fill on hover (pointer devices) */
-  --color-accent-press: #3567A6;
-  --color-accent-subtle: rgba(109, 159, 216, 0.16);
-  --color-accent-text: #82B4EC;                   /* accent-colored text/links on dark surfaces */
-  --color-on-accent: #FFFFFF;                     /* labels/icons ON an accent fill (white in both themes) */
+  /* §2 — accent family (indigo-blue; hover/press DARKEN to hold the white label) */
+  --color-accent: #4262FF;              /* fill; white label 4.75:1 */
+  --color-accent-hover: #3B57F0;        /* white label 5.52:1 */
+  --color-accent-press: #3149D6;        /* white label 6.87:1 */
+  --color-accent-text: #8FA6FF;         /* accent text/links/rings on dark */
+  --color-accent-subtle: rgba(143, 166, 255, 0.14);  /* selection tint, checked pills, dragover */
+  --color-on-accent: #FFFFFF;           /* labels/icons ON an accent fill */
+  --glow-cta: 0 4px 16px rgba(66, 98, 255, 0.35);    /* the hero CTA only */
 
-  /* §4.3 — band colors (dark-face editions): the light-surface text values
-     fail on the dark ladder, so the band TEXT tokens reuse the certified
-     stage variants' family (≥4.5:1 on bg/surface/tints — verified). */
-  --color-band-blurry: #E9152D;
-  --color-band-review: #C55300;
-  --color-band-sharp: #008932;
-  --color-band-blurry-text: #FF6B6E;
-  --color-band-review-text: #FFB25C;
-  --color-band-sharp-text: #5BD97E;
-  --color-band-blurry-tint: rgba(233, 21, 45, 0.16);
-  --color-band-review-tint: rgba(255, 178, 92, 0.14);
-  --color-band-sharp-tint: rgba(91, 217, 126, 0.14);
+  /* §2 — verdict bands (fill = dots/icons; text = text/tint labels) */
+  --color-band-blurry: #E5484D;         --color-band-blurry-text: #FF9595;
+  --color-band-review: #F5A524;         --color-band-review-text: #FFC46B;
+  --color-band-sharp: #30A46C;          --color-band-sharp-text: #52D273;
+  --color-band-blurry-tint: rgba(229, 72, 77, 0.15);
+  --color-band-review-tint: rgba(245, 165, 36, 0.15);
+  --color-band-sharp-tint: rgba(47, 191, 113, 0.14);
 
-  /* §4.4 — media stage and overlays (detail view; deeper than the app) */
-  --color-stage: #0E1013;
+  /* §2 — media stage (deeper than the app) */
+  --color-stage: #07080A;
   --color-stage-text: #FFFFFF;
-  --color-scrim: rgba(0, 0, 0, 0.60);
-  /* Stage band tokens (unchanged — already certified dark variants). */
-  --color-band-blurry-stage: #FF4245;
-  --color-band-review-stage: #FFA056;
-  --color-band-sharp-stage: #4AD968;
+  --color-scrim: rgba(4, 5, 7, 0.66);
+  --color-band-blurry-stage: #FF6B6E;
+  --color-band-review-stage: #FFA94D;
+  --color-band-sharp-stage: #43D17C;
 
   /* --------------------------------------------------------------------------
-     Design tokens — typography (§4). System fonts only; no webfonts, ever.
+     Design tokens — typography (§2). System fonts only; no webfonts, ever.
      -------------------------------------------------------------------------- */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Type scale (§4.2), rem on a 16px root. Weight 400/600 only. */
-  --text-large-title: 2.125rem;   --line-large-title: 2.5625rem;  --track-large-title: 0.012em;  /* 34/41 */
-  --text-title-1: 1.75rem;        --line-title-1: 2.125rem;       --track-title-1: 0.014em;      /* 28/34, reserved */
-  --text-title-2: 1.375rem;       --line-title-2: 1.75rem;        --track-title-2: -0.012em;     /* 22/28 */
-  --text-title-3: 1.25rem;        --line-title-3: 1.5625rem;      --track-title-3: -0.025em;     /* 20/25 */
-  --text-headline: 1.0625rem;     --line-headline: 1.375rem;      --track-headline: -0.026em;    /* 17/22 */
-  --text-body: 1.0625rem;         --line-body: 1.375rem;          --track-body: -0.026em;        /* 17/22 */
-  --text-callout: 1rem;           --line-callout: 1.3125rem;      --track-callout: -0.031em;     /* 16/21 */
-  --text-subhead: 0.9375rem;      --line-subhead: 1.25rem;        --track-subhead: -0.016em;     /* 15/20 */
-  --text-footnote: 0.8125rem;     --line-footnote: 1.125rem;      --track-footnote: -0.006em;    /* 13/18 */
-  --text-caption-1: 0.75rem;      --line-caption-1: 1rem;         --track-caption-1: 0;          /* 12/16 */
-  --text-caption-2: 0.6875rem;    --line-caption-2: 0.8125rem;    --track-caption-2: 0.006em;    /* 11/13 */
+  /* Type scale (§2), rem on a 16px root. Weights 400/600 (700 = empty title). */
+  --text-large-title: 2.125rem;   --line-large-title: 2.5rem;     --track-large-title: -0.02em;   /* 34/40 */
+  --text-title-1: 1.75rem;        --line-title-1: 2.125rem;       --track-title-1: -0.014em;      /* 28/34, reserved */
+  --text-title-2: 1.375rem;       --line-title-2: 1.75rem;        --track-title-2: -0.012em;      /* 22/28 */
+  --text-title-3: 1.25rem;        --line-title-3: 1.5625rem;      --track-title-3: -0.02em;       /* 20/25 */
+  --text-headline: 1.0625rem;     --line-headline: 1.375rem;      --track-headline: -0.014em;     /* 17/22 */
+  --text-body: 1.0625rem;         --line-body: 1.375rem;          --track-body: -0.014em;         /* 17/22 */
+  --text-callout: 1rem;           --line-callout: 1.3125rem;      --track-callout: -0.014em;      /* 16/21 */
+  --text-subhead: 0.9375rem;      --line-subhead: 1.25rem;        --track-subhead: -0.01em;       /* 15/20 */
+  --text-footnote: 0.8125rem;     --line-footnote: 1.125rem;      --track-footnote: 0;            /* 13/18 */
+  --text-caption-1: 0.75rem;      --line-caption-1: 1rem;         --track-caption-1: 0.004em;     /* 12/16 */
+  --text-caption-2: 0.6875rem;    --line-caption-2: 0.875rem;     --track-caption-2: 0.02em;      /* 11/14 */
+  --text-micro: 0.6875rem;        --line-micro: 1rem;             --track-micro: 0.08em;          /* 11/16, uppercase labels */
 
   /* --------------------------------------------------------------------------
-     Design tokens — spacing (§5.1 v1, 4px grid; unchanged in v2)
+     Design tokens — spacing (§2, 4px grid, unchanged from v2)
      -------------------------------------------------------------------------- */
   --space-2: 2px;
   --space-4: 4px;
@@ -97,29 +102,34 @@
   --space-48: 48px;
   --space-64: 64px;
 
-  /* §4.6 — radius (nested rule unchanged: inner = outer − padding, floor 4) */
+  /* §2 — radius (restrained; nested rule kept: inner = outer − padding, floor 4) */
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 999px;
 
-  /* §4.5 — depth */
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-floating: 0 8px 24px rgba(0, 0, 0, 0.60);
+  /* §2 — depth (ambient pair + directional, warm-dark) */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);
+  --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.40);
+  /* Legacy aliases so un-migrated rules keep working during the restyle: */
+  --shadow-card: var(--shadow-1);
+  --shadow-floating: var(--shadow-3);
 
   /* --------------------------------------------------------------------------
-     Design tokens — motion (§4.6; v1 §6 durations and the allowed-motion
-     list unchanged). Only color/background-color/border-color/opacity/
-     transform are ever transitioned.
+     Design tokens — motion (§2). Only color/background-color/border-color/
+     opacity/transform are ever transitioned.
      -------------------------------------------------------------------------- */
   --ease-standard: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 120ms;
   --duration-standard: 200ms;
   --duration-slow: 320ms;
   --duration-stagger: 50ms;
 
-  /* Shell metrics (§7.1: header 44–52px tall on all breakpoints) */
-  --header-h: 48px;
+  /* Shell metrics (§3: header 52px; 56px at ≥768) */
+  --header-h: 52px;
   --page-pad: var(--space-16);
 }
 
@@ -138,7 +148,13 @@ html {
 
 body {
   margin: 0;
-  background: var(--color-bg);
+  /* §3: the one quiet glow behind the first screenful rides as a
+     background-IMAGE over the solid background-color, so the computed
+     background-color stays exactly --color-bg (the v2-r3 token probe reads
+     it). Lightens the base by <2% — every contrast pair keeps its ratio. */
+  background-color: var(--color-bg);
+  background-image: radial-gradient(120% 60% at 50% -10%, rgba(66, 98, 255, 0.07), transparent 60%);
+  background-attachment: fixed;
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-body);
@@ -159,6 +175,21 @@ img {
   display: none !important;
 }
 
+/* §6.11 fix: the shared entrance (fade + 12px rise, §1.5 motion family)
+   lives in NORMAL scope — previously declared only inside the
+   prefers-reduced-motion block, so entrances never actually animated.
+   Consumers: .empty-state, .progress-card, .tile, .results, .action-bar. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .svg-defs {
   position: absolute;
   width: 0;
@@ -173,8 +204,8 @@ img {
 }
 
 .icon--mark {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   color: var(--color-accent-text);
 }
 
@@ -198,14 +229,14 @@ img {
   pointer-events: none;
 }
 
-/* Single visible focus style (§12): :focus-visible only, never on pointer clicks. */
+/* Single visible focus style (§7): :focus-visible only, never on pointer clicks. */
 :focus-visible {
-  outline: 2px solid var(--color-accent-text); /* bright ring reads on the dark ladder */
+  outline: 2px solid var(--color-accent-text); /* bright ring reads on every dark surface */
   outline-offset: 2px;
 }
 
 /* --------------------------------------------------------------------------
-   Page shell (§7.1): sticky translucent header, hairline bottom
+   Page shell (§3): sticky glass header, hairline bottom
    -------------------------------------------------------------------------- */
 .app-header {
   position: sticky;
@@ -217,15 +248,19 @@ img {
   gap: var(--space-16);
   min-height: var(--header-h);
   padding: var(--space-8) var(--page-pad);
-  background: rgba(28, 30, 33, 0.80); /* dark glass (v0.4.0 dark theme) */
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  /* §3/§6.8: 0.82 opacity is the certified worst case — the accent-text
+     "Start over" label reads 5.08:1 over a pure-white photo underneath. */
+  background: var(--glass-header);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border-bottom: 1px solid var(--color-hairline);
 }
 
-@supports not ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+/* Glass fallback (literal blur() in the condition — a var() inside @supports
+   is always "valid" and would invert the test). */
+@supports not ((backdrop-filter: blur(24px)) or (-webkit-backdrop-filter: blur(24px))) {
   .app-header {
-    background: var(--color-surface);
+    background: var(--color-surface-raised);
   }
 }
 
@@ -245,7 +280,8 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Buttons (§8.1). Labels are verbs, no trailing periods.
+   Buttons (§4.1/§4.3). Labels are verbs, no trailing periods.
+   One gradient primary, one filled secondary, accent-text text buttons.
    -------------------------------------------------------------------------- */
 .btn-primary,
 .btn-secondary {
@@ -269,21 +305,27 @@ img {
               transform var(--duration-fast) var(--ease-standard);
 }
 
+/* §4.1 CTA: the gradient rides as background-IMAGE over an explicit
+   background-color (never the background shorthand — it would reset the
+   color the token probes read). */
 .btn-primary {
-  background: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: linear-gradient(180deg, var(--color-accent) 0%, #3550E8 100%);
   color: var(--color-on-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 @media (hover: hover) {
   .btn-primary:hover {
-    /* "fill lightens 4%" (§8.1): the accent mixed 4% toward white — the
-       --color-accent-hover token (design-spec-v2 §4.8 literal map). */
-    background: var(--color-accent-hover);
+    /* Hover DARKENS the gradient one step (both stops) — the white label
+       only gains contrast (5.52:1 at --color-accent-hover). */
+    background-color: var(--color-accent-hover);
+    background-image: linear-gradient(180deg, var(--color-accent-hover) 0%, var(--color-accent-press) 100%);
   }
 }
 
 .btn-primary:active {
-  background: var(--color-accent-press);
+  filter: brightness(0.94);
   transform: scale(0.98);
 }
 
@@ -304,16 +346,16 @@ img {
   transform: scale(0.98);
 }
 
-/* Empty-state primary is 48px tall (§9a) with desktop side padding (§8.1). */
+/* Empty-state hero CTA: 48px tall, the one glow in the system (§4.1). */
 .btn-hero {
   min-height: 48px;
   padding: 0 var(--space-20);
+  box-shadow: var(--glow-cta), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
-/* Text button (§8.1, design-spec-v2 §5): the label is always --color-accent,
-   on every surface — white cards, the grouped background, and the translucent
-   header. No surface-dependent variant exists (§5 rule); the 32px pointer
-   density is the .btn-text--compact modifier (fine pointers only, below). */
+/* Text button (§4.1/§4.4): the label is accent-text on every surface; the
+   stage context overrides to stage text (.detail__done, kept). The 32px
+   pointer density is the .btn-text--compact modifier (fine pointers only). */
 .btn-text {
   display: inline-flex;
   align-items: center;
@@ -346,16 +388,16 @@ img {
   cursor: default;
 }
 
+/* Disabled primary (§4.1): flat muted fill, no gradient, no shadow.
+   The secondary mirrors it exactly (kept rule). */
 .btn-primary:disabled {
-  background: var(--color-surface-muted);
+  background-color: var(--color-surface-muted);
+  background-image: none;
   color: var(--color-text-muted);
+  box-shadow: none;
   cursor: default;
 }
 
-/* UX F7 (§8.1 Buttons, Disabled column: "as primary"): the secondary gets
-   the same treatment — muted fill and label, no pointer. The fill token is
-   already .btn-secondary's base fill; it is stated here so the rule reads
-   as the exact mirror of .btn-primary:disabled. */
 .btn-secondary:disabled {
   background: var(--color-surface-muted);
   color: var(--color-text-muted);
@@ -363,8 +405,8 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Content area = the drop zone (§8.2). Drag feedback: fill shifts to
-   --color-accent-subtle, border to accent (§6.2), --duration-fast.
+   Content area = the drop zone (§4.1). Drag feedback: fill shifts to
+   --color-accent-subtle, ring to a dashed accent-text border, 120ms.
    -------------------------------------------------------------------------- */
 .content {
   position: relative;
@@ -377,13 +419,13 @@ img {
   background-color: var(--color-accent-subtle);
 }
 
-/* Drag ring: fades in via opacity (§6.1 permits transitioning opacity;
-   the ring itself is a border, so no colored shadow is involved). */
+/* Drag ring: fades in via opacity (motion list permits opacity); the ring
+   itself is a dashed border, so no colored shadow is involved. */
 .content::after {
   content: "";
   position: absolute;
   inset: var(--space-8);
-  border: 2px solid var(--color-accent);
+  border: 1.5px dashed var(--color-accent-text);
   border-radius: var(--radius-lg);
   opacity: 0;
   pointer-events: none;
@@ -394,39 +436,76 @@ img {
   opacity: 1;
 }
 
+/* §4.1 drag feedback addition: the glass card itself acknowledges the drop
+   (border brightens, fill thickens) — background-color/border-color only. */
+.content.is-dragover .empty-state__card {
+  border-color: rgba(143, 166, 255, 0.55);
+  background-color: rgba(18, 20, 26, 0.85);
+}
+
 .view-root {
   max-width: 1200px;
   margin-inline: auto;
 }
 
 /* --------------------------------------------------------------------------
-   Empty / upload state (§9a). The card boundary is invisible; whitespace
-   composes it. Without folder-pick support the secondary button is absent
-   from the DOM entirely (§11) — the layout does not shift.
+   Empty / upload state (§4.1). The §5.1 wrapper: .empty-state keeps the
+   full-height centering layout, .empty-state__card carries the glass card
+   chrome (so the card never stretches on desktop). Without folder-pick
+   support the secondary button is absent from the DOM entirely (§11) — the
+   layout does not shift.
    -------------------------------------------------------------------------- */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: var(--space-64) 0 var(--space-48);
-  /* Motion pass: the empty state rises in once per render (§6.2). */
+  padding: var(--space-24) 0 var(--space-48);
+  /* Motion: the empty state rises in once per render (§4.1). */
   animation: rise-in var(--duration-slow) var(--ease-standard);
+}
+
+.empty-state__card {
+  width: 100%;
+  max-width: 560px;
+  padding: 40px var(--space-24);
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1.5px dashed rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2), inset 0 1px 0 var(--edge-highlight);
+  transition: background-color var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard);
+}
+
+@supports not ((backdrop-filter: blur(24px)) or (-webkit-backdrop-filter: blur(24px))) {
+  .empty-state__card {
+    background: var(--color-surface-raised);
+  }
 }
 
 .empty-state__icon {
   display: inline-flex;
-  color: var(--color-text-muted);
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle);
+  border: 1px solid var(--color-hairline);
+  color: var(--color-accent-text);
 }
 
 .empty-state__icon .icon {
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
 }
 
 /* All-failed variant (§9e): warning icon in the review-orange family, never red. */
 .empty-state--failed .empty-state__icon {
-  color: var(--color-band-review);
+  background: var(--color-band-review-tint);
+  color: var(--color-band-review-text); /* #FFC46B */
 }
 
 .empty-state__title {
@@ -434,7 +513,7 @@ img {
   font-size: var(--text-large-title);
   line-height: var(--line-large-title);
   letter-spacing: var(--track-large-title);
-  font-weight: 400;
+  font-weight: 700; /* the one 700 in the system (§3) */
 }
 
 .empty-state--failed .empty-state__title {
@@ -444,8 +523,8 @@ img {
 }
 
 .empty-state__body {
-  margin: var(--space-16) 0 0;
-  max-width: 30ch;
+  margin: var(--space-12) 0 0;
+  max-width: 34ch;
   font-size: var(--text-body);
   line-height: var(--line-body);
   letter-spacing: var(--track-body);
@@ -478,7 +557,7 @@ img {
 }
 
 .empty-state__privacy {
-  margin: var(--space-48) 0 0;
+  margin: 40px 0 0; /* §4.1: privacy line, 40px below the drop hint */
   font-size: var(--text-caption-1);
   line-height: var(--line-caption-1);
   letter-spacing: var(--track-caption-1);
@@ -486,7 +565,7 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Gallery state (§9b structure, pre-analysis): section toolbar, thumbnail grid.
+   Gallery state (§4.2 structure, pre-analysis): section toolbar, thumbnail grid.
    -------------------------------------------------------------------------- */
 .gallery-toolbar {
   display: flex;
@@ -502,36 +581,38 @@ img {
   align-items: baseline;
   gap: var(--space-8);
   margin: 0;
-  font-size: var(--text-footnote);
-  line-height: var(--line-footnote);
-  letter-spacing: var(--track-footnote);
-  font-weight: 400;
-  color: var(--color-text-secondary);
+  font-size: var(--text-subhead);
+  line-height: var(--line-subhead);
+  letter-spacing: var(--track-subhead);
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .gallery-toolbar__count {
+  font-size: var(--text-footnote);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
 
-/* Toolbar action mirrors the band-header "Select all" pattern (§8.1):
+/* Toolbar action mirrors the band-header "Select all" pattern (§4.2):
    a .btn-text with the btn-text--compact modifier in markup for the
-   32px fine-pointer density (design-spec-v2 §5). */
+   32px fine-pointer density. */
 
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* Photo tile (§8.1 anatomy, Phase 2: thumbnails + meta; selection/detail
-   targets arrive in Phase 4). Square, object-fit cover, --radius-md. */
+/* Photo tile (§4.2 anatomy): square, object-fit cover, --radius-md; tiles
+   rise in once when they enter the grid (reduced motion collapses it). */
 .tile {
   margin: 0;
   min-width: 0;
+  animation: rise-in var(--duration-slow) var(--ease-standard);
 }
 
 .tile__photo {
@@ -540,9 +621,8 @@ img {
   overflow: hidden;
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
-  /* Motion pass (§6.2 press feedback — the allowed list): a quick press
-     dip on the photo area; transform only, fast, reduced-motion collapses
-     the duration to 1ms via the global rule. */
+  /* Press feedback: a quick dip on the photo area; transform only, fast,
+     reduced-motion collapses it via the global rule. */
   transition: transform var(--duration-fast) var(--ease-standard);
 }
 
@@ -561,6 +641,7 @@ img {
   font-size: var(--text-caption-1);
   line-height: var(--line-caption-1);
   letter-spacing: var(--track-caption-1);
+  color: var(--color-text-secondary); /* gallery filenames; results pins --color-text */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -574,30 +655,33 @@ img {
   margin-top: var(--space-2);
 }
 
-/* Score chip (§8.1, §11.2 format) — the app's signature element. The text
-   is "NN% sharp" (tabular so grids of chips align and widths stay stable).
-   Pending state: muted dot + "—" so the grid height never jumps when scores
-   land in Phase 3; a skipped photo keeps "—" (never "0% sharp", §11.2). */
+/* Score chip (§4.2) — a tinted pill badge; "NN% sharp" in tabular numerals
+   so grids of chips align. Pending state (§4.2): surface-muted fill, muted
+   dot + "—" so the grid height never jumps; a skipped photo keeps "—". */
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
   font-size: var(--text-footnote);
   line-height: var(--line-footnote);
   letter-spacing: var(--track-footnote);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
 .chip__dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: var(--radius-full);
-  background: var(--color-fill-pressed);
+  background: var(--color-text-muted);
 }
 
 /* --------------------------------------------------------------------------
-   Notice cards (§8.2, §9e) — hairline cards, never modals, never toasts.
+   Notice cards (§4.8) — hairline cards, never modals, never toasts.
    Warnings use the review-orange family; red stays reserved for the
    blurry verdict and blocked errors. Entrance: fade only.
    -------------------------------------------------------------------------- */
@@ -607,11 +691,11 @@ img {
   gap: var(--space-12);
   max-width: 960px;
   margin: 0 auto var(--space-24);
-  padding: var(--space-16);
+  padding: var(--space-16) var(--space-20);
   background: var(--color-surface);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--edge-highlight);
   animation: notice-in var(--duration-standard) var(--ease-standard);
 }
 
@@ -622,7 +706,7 @@ img {
 
 .notice__icon {
   margin-top: var(--space-2);
-  color: var(--color-band-review);
+  color: var(--color-band-review); /* #F5A524 */
 }
 
 .notice__icon .icon {
@@ -656,9 +740,9 @@ img {
 }
 
 /* Notice disclosure summary: joins the .btn-text component in markup
-   (design-spec-v2 §5) — class "notice__summary btn-text btn-text--compact",
-   so type, color, and target size all come from the component. The leftover
-   rules here are layout-only (a <summary> is not a button). */
+   — class "notice__summary btn-text btn-text--compact", so type, color,
+   and target size all come from the component. The leftover rules here
+   are layout-only (a <summary> is not a button). */
 .notice__summary {
   list-style: none;
 }
@@ -667,13 +751,17 @@ img {
   display: none;
 }
 
+/* §4.8 file lists: mono 12 secondary on a hairline left rule (replaces the
+   plain indent) — shared with .confirm__list. */
 .notice__filelist {
   margin: var(--space-8) 0 0;
-  padding: 0;
+  padding-left: var(--space-12);
+  border-left: 1px solid var(--color-hairline);
   list-style: none;
   font-family: var(--font-mono);
   font-size: var(--text-caption-1);
   line-height: var(--line-caption-1);
+  color: var(--color-text-secondary);
 }
 
 .notice__filelist li {
@@ -696,16 +784,17 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Phase 4 — §9b analysis progress card
+   Analysis progress card (§4.2)
    -------------------------------------------------------------------------- */
 .progress-card {
   max-width: 560px;
   margin: var(--space-8) auto var(--space-24);
-  padding: var(--space-16);
+  padding: var(--space-20);
   background: var(--color-surface);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--edge-highlight);
+  animation: rise-in var(--duration-slow) var(--ease-standard);
 }
 
 .progress-card__heading {
@@ -725,8 +814,8 @@ img {
   color: var(--color-text-secondary);
 }
 
-/* Determinate bar: 4px, --color-track (§4.5: was inline rgba(0,0,0,0.06)),
-   accent fill moved with scaleX only — never width (§6.1). */
+/* Determinate bar: 4px, --color-track; accent fill moved with scaleX only —
+   never width — and lit by a soft accent glow (§4.2). */
 .progress-card__bar {
   height: 4px;
   margin-top: var(--space-12);
@@ -740,30 +829,30 @@ img {
   height: 100%;
   border-radius: var(--radius-full);
   background: var(--color-accent-text);
+  box-shadow: 0 0 8px rgba(143, 166, 255, 0.40);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform var(--duration-standard) var(--ease-standard);
 }
 
 /* --------------------------------------------------------------------------
-   Phase 4 — §9c grouped results
+   Grouped results (§4.3)
    -------------------------------------------------------------------------- */
 .results {
   /* Clearance for the fixed action bar: --action-bar-h is written by the
-     bar's ResizeObserver (the bar's height varies with wrapping — six
-     controls at 375px reach ~250px, and a fixed 176px estimate let the
-     last tiles end up BEHIND the bar, untappable). */
-  padding-bottom: calc(var(--action-bar-h, 130px) + var(--space-24));
-  /* Motion pass: the results surface fades and rises once per entrance
-     (the band reveal staggers inside it; §6.2 entrance family). */
+     bar's ResizeObserver and tracks the REAL height on every breakpoint.
+     §6.3 fix: the old fixed 128px desktop override is deleted — the base
+     calc below follows the shorter floating pill too. */
+  padding-bottom: calc(var(--action-bar-h, 96px) + var(--space-24));
+  /* The results surface fades and rises once per entrance (the band reveal
+     staggers inside it). */
   animation: rise-in var(--duration-slow) var(--ease-standard);
 }
 
-/* §11.2 percentage subtitle — one instance per results view, directly above
-   the first band header (below the §9e notice slot). Secondary text on the
-   page background; the .band margin-top below it supplies the gap. */
+/* Percentage subtitle — one instance per results view, directly above the
+   first band header (below the notice slot). */
 .results__subtitle {
-  margin: 0;
+  margin: 0 0 var(--space-8);
   font-size: var(--text-subhead);
   line-height: var(--line-subhead);
   letter-spacing: var(--track-subhead);
@@ -781,25 +870,28 @@ img {
   margin-bottom: var(--space-12);
 }
 
-/* Band chip = the section heading (h2): tint fill, radius-sm, band text
-   color, 8px dot in the band text color (§3.3, §8.1). Text on the tint
-   composite uses --color-band-*-text (§3.3 rule, Phase 4 fix F1). */
+/* Band chip = the section heading (h2): a pill in the band tint with the
+   band-text token at the uppercase micro size (§4.3). text-transform is
+   visual only — the DOM text and accessible name stay "Blurry" /
+   "Needs review" / "Sharp". */
 .band-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-8);
   margin: 0;
-  padding: var(--space-4) var(--space-8);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-footnote);
-  line-height: var(--line-footnote);
-  letter-spacing: var(--track-footnote);
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: var(--text-micro);
+  line-height: var(--line-micro);
+  letter-spacing: var(--track-micro);
   font-weight: 600;
+  text-transform: uppercase;
 }
 
 .band-chip__dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: var(--radius-full);
   background: currentColor;
 }
@@ -807,23 +899,27 @@ img {
 .band-chip--blurry {
   color: var(--color-band-blurry-text);
   background: var(--color-band-blurry-tint);
+  border-color: rgba(229, 72, 77, 0.28);
 }
 
 .band-chip--review {
   color: var(--color-band-review-text);
   background: var(--color-band-review-tint);
+  border-color: rgba(245, 165, 36, 0.28);
 }
 
 .band-chip--sharp {
   color: var(--color-band-sharp-text);
   background: var(--color-band-sharp-tint);
+  border-color: rgba(47, 191, 113, 0.28);
 }
 
-/* Skipped photos are not a band: neutral chip, no tint (§3.5 — color
-   signals verdicts; a skip is the absence of one). */
+/* Skipped photos are not a band: neutral chip, no tint — color signals
+   verdicts; a skip is the absence of one. */
 .band-chip--skipped {
   color: var(--color-text-secondary);
   background: var(--color-surface-muted);
+  border-color: transparent;
 }
 
 .band__count {
@@ -837,10 +933,9 @@ img {
 .band__toggle {
   margin-left: auto;
   min-height: 44px;
-  /* Hierarchy pass (2026-11-06): a band utility toggle is a tertiary
-     control — footnote size, regular weight, secondary ink. The accent
-     stays reserved for the primary download + selection + focus (§4.2);
-     an accent toggle here competed with the band chip and the CTA. */
+  /* A band utility toggle is a tertiary control — footnote size, regular
+     weight, secondary ink. The accent stays reserved for the primary
+     download + selection + focus. */
   font-size: var(--text-footnote);
   line-height: var(--line-footnote);
   font-weight: 400;
@@ -856,9 +951,9 @@ img {
   color: var(--color-text-muted);
 }
 
-/* §6.2 band reveal: section fades in and rises 8px (--duration-slow),
-   staggered by --duration-stagger between items, at most six items.
-   Tile delays are set inline by ResultsView (0–5 × 50ms). */
+/* Band reveal: section fades in and rises 8px (--duration-slow), staggered
+   by --duration-stagger between items, at most six items. Tile delays are
+   set inline by ResultsView (0–5 × 50ms). */
 .band--reveal {
   animation: band-reveal var(--duration-slow) var(--ease-standard) backwards;
 }
@@ -879,7 +974,7 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Phase 4 — §8.1 photo tile, results anatomy (two targets, one tile)
+   Results photo tile (§4.3 anatomy: two targets, one tile)
    -------------------------------------------------------------------------- */
 .results .tile__photo {
   display: block;
@@ -895,10 +990,11 @@ img {
   transform: scale(0.98);
 }
 
-/* Selected: 2px inset accent ring (instant, §6.2) + accent-subtle tint
-   overlay + 20px check badge (scales 0.9 → 1). */
+/* Selected: 2px inset accent ring + a 1px dark outer contour (keeps the
+   selection readable over bright photos) + the accent-subtle tint + the
+   check badge. */
 .results .tile__photo.is-selected {
-  box-shadow: inset 0 0 0 2px var(--color-accent);
+  box-shadow: inset 0 0 0 2px var(--color-accent), 0 0 0 1px rgba(0, 0, 0, 0.55);
 }
 
 .results .tile__photo.is-selected::before {
@@ -915,12 +1011,13 @@ img {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: var(--radius-full);
   background: var(--color-accent);
   color: var(--color-on-accent);
-  pointer-events: none; /* the badge is not a separate target (§12) */
+  box-shadow: 0 2px 8px rgba(66, 98, 255, 0.40);
+  pointer-events: none; /* the badge is not a separate target */
 }
 
 .tile__check .icon {
@@ -942,7 +1039,7 @@ img {
   }
 }
 
-/* Meta row button (opens §9d): ≥44px touch target on mobile. */
+/* Meta row button (opens the detail view): ≥44px touch target on mobile. */
 .tile__meta-btn {
   display: block;
   width: 100%;
@@ -957,8 +1054,8 @@ img {
 .results .tile__filename {
   display: block;
   color: var(--color-text);
-  /* R6.1 hierarchy pass: buttons never inherit fonts — pin the filename to
-     the footnote token instead of the UA's 13.33px default. */
+  /* Buttons never inherit fonts — pin the filename to the footnote token
+     instead of the UA's 13.33px default. */
   font-size: var(--text-footnote);
   line-height: var(--line-footnote);
   font-weight: 400;
@@ -972,7 +1069,7 @@ img {
   margin-top: var(--space-2);
 }
 
-/* §6.3: hover is an overlay change only, never a scale — pointer only. */
+/* Hover is an overlay change only, never a scale — pointer only. */
 @media (hover: hover) {
   .results .tile__photo:hover::after {
     content: "";
@@ -982,12 +1079,13 @@ img {
   }
 }
 
-/* §8.1 score chip states: 8px band-color dot + number in the band text
-   value. On the grouped background the number uses --color-band-*-text
-   (§3.3 rule, Phase 4 fix F2); the dot keeps the band color. Pending
-   keeps the muted dot + "—". */
+/* Score chip variants (§4.2): dot in the band fill token, number in the
+   band-text token, tinted pill with a 30% band border. Pending keeps the
+   muted dot + "—" with a neutral fill. */
 .chip--blurry {
   color: var(--color-band-blurry-text);
+  background: var(--color-band-blurry-tint);
+  border-color: rgba(229, 72, 77, 0.30);
 }
 
 .chip--blurry .chip__dot {
@@ -996,6 +1094,8 @@ img {
 
 .chip--review {
   color: var(--color-band-review-text);
+  background: var(--color-band-review-tint);
+  border-color: rgba(245, 165, 36, 0.30);
 }
 
 .chip--review .chip__dot {
@@ -1004,29 +1104,46 @@ img {
 
 .chip--sharp {
   color: var(--color-band-sharp-text);
+  background: var(--color-band-sharp-tint);
+  border-color: rgba(47, 191, 113, 0.30);
 }
 
 .chip--sharp .chip__dot {
   background: var(--color-band-sharp);
 }
 
+.chip--pending {
+  background: var(--color-surface-muted);
+  border-color: var(--color-hairline);
+  color: var(--color-text-secondary);
+}
+
+.chip--pending .chip__dot {
+  background: var(--color-text-muted);
+}
+
 /* --------------------------------------------------------------------------
-   Phase 4 — §8.1/§9c action bar
+   Action bar (§4.3): full-width glass sheet on mobile; floating glass pill
+   at ≥768. §6.1 fix: exactly ONE animation declaration (rise-in) — the old
+   duplicate notice-in override is deleted.
    -------------------------------------------------------------------------- */
 .action-bar {
   position: fixed;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   bottom: 0;
   z-index: 30;
   padding: var(--space-12) var(--page-pad) calc(var(--space-12) + env(safe-area-inset-bottom));
-  background: var(--color-surface);
+  background: var(--glass-bar);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border-top: 1px solid var(--color-hairline);
-  /* Motion pass (2026-11-06): the bar rises in with the results (§6.2
-     entrance family — transform + opacity only, once per mount). */
   animation: rise-in var(--duration-slow) var(--ease-standard);
-  box-shadow: var(--shadow-floating);
-  animation: notice-in var(--duration-standard) var(--ease-standard);
+}
+
+@supports not ((backdrop-filter: blur(24px)) or (-webkit-backdrop-filter: blur(24px))) {
+  .action-bar {
+    background: var(--color-surface);
+  }
 }
 
 .action-bar__row {
@@ -1037,20 +1154,40 @@ img {
   margin-inline: auto;
 }
 
+/* §4.3 hierarchy: "Download selected" is the one gradient primary; the
+   utility actions are ghost secondaries (transparent fill, hairline border,
+   secondary ink). The subhead size keeps the bar compact (kept from the v2
+   hierarchy pass). */
 .action-bar__actions .btn-secondary {
-  /* Hierarchy pass: the primary download stays the largest action (17px);
-     the three secondaries step down to subhead so the bar reads primary →
-     secondary → tertiary instead of four equal buttons. */
+  background: transparent;
+  border: 1px solid var(--color-hairline);
+  color: var(--color-text-secondary);
   font-size: var(--text-subhead);
 }
 
-/* Hierarchy pass: a hairline separates the destructive action from the
-   constructive pair (Add more · Save HD copies | Delete selected). */
+@media (hover: hover) {
+  .action-bar__actions .btn-secondary:hover {
+    background: var(--color-hover-overlay);
+    color: var(--color-text);
+  }
+}
+
+.action-bar__actions .btn-secondary:active {
+  transform: scale(0.98);
+}
+
+.action-bar__actions .btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* A strong hairline separates the destructive action from the constructive
+   pair (Add more · Save HD copies | Delete selected). */
 .action-bar__divider {
   width: 1px;
   align-self: stretch;
   margin: var(--space-4) 0;
-  background: var(--color-hairline);
+  background: var(--color-separator-strong);
 }
 
 .action-bar__summary {
@@ -1064,8 +1201,7 @@ img {
 
 .action-bar__actions {
   display: flex;
-  /* Bug fix (2026-11-07): five actions in one row overflow the 375px
-     viewport (Download selected landed off-screen and untappable). Wrap on
+  /* Five actions in one row would overflow the 375px viewport: wrap on
      narrow widths, right-aligned; the bar's ResizeObserver feeds the real
      height to --action-bar-h so the grid clearance tracks it. */
   flex-wrap: wrap;
@@ -1077,7 +1213,7 @@ img {
   flex: 1;
 }
 
-/* §13 device-reality copy: the app cannot delete from the phone. */
+/* Device-reality copy: the app cannot delete from the phone. */
 .action-bar__device-note {
   max-width: 1200px;
   margin: var(--space-8) 0 0;
@@ -1088,15 +1224,16 @@ img {
   color: var(--color-text-muted);
 }
 
-/* §6.2: the one looping animation — 16px inline spinner, 1s linear —
-   permitted because it communicates in-progress state (download busy). */
+/* The one looping animation — 16px inline spinner, 1s linear — communicating
+   in-progress state (busy downloads). §6.5: white arc on the accent fill,
+   0.28 white track. */
 .spinner {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: var(--color-surface);
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: var(--color-on-accent);
   animation: spinner-rotate 1s linear infinite;
 }
 
@@ -1107,7 +1244,7 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Phase 4 — §8.2/§9d detail view (sheet on mobile, modal on desktop)
+   Detail view (§4.4: sheet on mobile, modal on desktop)
    -------------------------------------------------------------------------- */
 .detail {
   position: fixed;
@@ -1117,6 +1254,10 @@ img {
   align-items: center;
   justify-content: center;
   background: var(--color-scrim);
+  /* §4.4: the scrim blurs the app behind it. Without backdrop-filter the
+     scrim alone is the fallback (6.59:1-class pairs stay intact). */
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   animation: detail-fade var(--duration-slow) var(--ease-standard);
 }
 
@@ -1140,7 +1281,7 @@ img {
   animation: sheet-rise var(--duration-slow) var(--ease-standard);
 }
 
-/* §9d: full-screen sheet slides up 24px and fades on mobile. */
+/* Full-screen sheet slides up 24px and fades on mobile. */
 @keyframes sheet-rise {
   from {
     opacity: 0;
@@ -1152,12 +1293,27 @@ img {
   }
 }
 
+/* Top bar (§4.4): glass over the photo — 56px, hairline bottom, the
+   filename + size live between Done and Select. */
 .detail__top {
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  min-height: 52px;
+  min-height: 56px;
   padding: var(--space-8) var(--space-16);
+  background: var(--glass-stage);
+  -webkit-backdrop-filter: blur(20px) saturate(var(--glass-saturate));
+  backdrop-filter: blur(20px) saturate(var(--glass-saturate));
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+/* Shared solid fallback for the stage bars (§4.4: #101114). Only
+   --color-stage-text/--color-text-secondary are used on them (§2.2 rule). */
+@supports not ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+  .detail__top,
+  .detail__bottom {
+    background: #101114;
+  }
 }
 
 .detail__done {
@@ -1184,14 +1340,13 @@ img {
   color: var(--color-stage-text);
 }
 
-/* §11.5: the file-size caption under the filename (moved from the grid in
-   R4's §11.2 layout consequence). Stage white at reduced opacity — the same
-   sanctioned white-alpha pattern as the stage veils; ≈9:1 on #14171C. */
+/* File-size caption under the filename: stage white at 0.72 (10.32:1). */
 .detail__size {
   display: block;
   margin-top: 2px;
   font-size: var(--text-caption-1);
   line-height: var(--line-caption-1);
+  font-variant-numeric: tabular-nums;
   color: var(--color-stage-text);
   opacity: 0.72;
   white-space: nowrap;
@@ -1203,8 +1358,8 @@ img {
   flex-shrink: 0;
 }
 
-/* §9d: the check glyph shows only while the toggle is on. SVG elements
-   don't reflect the [hidden] attribute, so visibility is class-toggled
+/* The check glyph shows only while the toggle is on. SVG elements don't
+   reflect the [hidden] attribute, so visibility is class-toggled
    (is-selected), the same pattern as the grid tile's badge. */
 .detail__select-check {
   display: none;
@@ -1223,6 +1378,9 @@ img {
   gap: var(--space-8);
   min-height: 0;
   padding: var(--space-8) var(--space-16);
+  /* §6.2(a): unconditional paint guard — the stage can never bleed out of
+     the wrap and over the converter panel below. */
+  overflow: hidden;
 }
 
 .detail__stage {
@@ -1241,10 +1399,9 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   v0.4.1 BEFORE/AFTER WIPE (user request: "animation must be wipe slider")
-   The converted preview layers over the original, clipped from the divider
-   rightward; the divider drags (pointer or arrow keys). The auto-sweep on
-   preview creation animates the blurry→clear transition.
+   BEFORE/AFTER WIPE (§4.5). The converted preview layers over the original,
+   clipped from the divider rightward; the divider drags (pointer or arrow
+   keys). The auto-sweep on preview creation animates blurry→clear.
    -------------------------------------------------------------------------- */
 
 /* While comparing, stage drags belong to the divider — never the gallery.
@@ -1260,6 +1417,26 @@ img {
    height — keep the controls reachable by scrolling instead of clipping. */
 .detail__panel {
   overflow-y: auto;
+}
+
+/* §6.2(b) — HD panel stage caps (the only consumer of the JS-set
+   has-hd-panel class, §5.2): with the panel open the wrap relaxes to
+   `flex: 0 1 auto`, floored at 160px (wipe readability) and capped at
+   240px, so panel + capped stage + bottom bar fit inside the 680px modal.
+   The WRAP is bounded — never the image (review finding 1): a fixed image
+   cap overrode the base max-height:100% and, on short viewports, laid the
+   photo out taller than the stage, where the overflow guard clipped it.
+   A bounded wrap keeps the stage height definite, so the image always
+   scales to fit. Without the class, behavior degrades to today's scroll —
+   never overlap (the wrap's overflow guard above). */
+.detail__panel.has-hd-panel .detail__stage-wrap {
+  flex: 0 1 auto;
+  min-height: 160px;
+  max-height: 240px;
+}
+
+.detail__panel.has-hd-panel .detail__stage {
+  min-height: 0;
 }
 
 .detail__after {
@@ -1304,9 +1481,12 @@ img {
   left: 50%;
   width: 2px;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.90);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.50);
 }
 
+/* §6.5: the handle + chevrons are tokenized (--color-on-accent /
+   --color-on-light) — no one-off hex. */
 .detail__wipe-handle {
   position: absolute;
   top: 50%;
@@ -1315,8 +1495,8 @@ img {
   height: 36px;
   transform: translate(-50%, -50%);
   border-radius: var(--radius-full);
-  background: #FFFFFF;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  background: var(--color-on-accent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(0, 0, 0, 0.20);
 }
 
 /* The two chevrons inside the handle (‹ ›). */
@@ -1328,8 +1508,8 @@ img {
   width: 8px;
   height: 8px;
   margin-top: -4px;
-  border-top: 2px solid #1C1E21;
-  border-right: 2px solid #1C1E21;
+  border-top: 2px solid var(--color-on-light);
+  border-right: 2px solid var(--color-on-light);
 }
 
 .detail__wipe-handle::before {
@@ -1347,19 +1527,24 @@ img {
   outline-offset: 2px;
 }
 
-/* Corner labels: Before (left) / After (right). */
+/* Corner labels: Before (left) / After (right). §4.5/§6.7: the veil token
+   (0.66) is the certified worst case (6.59:1 over pure white); the blur is
+   progressive enhancement, the token alone is the fallback. */
 .detail__wipe-label {
   position: absolute;
   top: var(--space-12);
   z-index: 3;
   padding: 2px var(--space-8);
   border-radius: var(--radius-full);
-  background: rgba(11, 14, 19, 0.55);
+  background: var(--color-veil);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   font-size: var(--text-caption-1);
   line-height: var(--line-caption-1);
   font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #FFFFFF;
+  text-transform: uppercase;
+  letter-spacing: var(--track-micro);
+  color: var(--color-stage-text);
   pointer-events: none;
 }
 
@@ -1371,15 +1556,15 @@ img {
   right: var(--space-12);
 }
 
-/* Prev/next chevrons flank the stage, desktop only (§7.3). */
+/* Prev/next chevrons flank the stage, desktop only (≥768 block below). */
 .detail__nav {
   display: none;
 }
 
-/* §9d mobile: "‹ swipe ›" hint under the stage. The chevron glyphs are
-   compact prev/next buttons (same actions and accessible names as the
-   desktop chevrons) so navigation stays keyboard-reachable at mobile
-   widths, where the flanking chevrons are display:none. */
+/* Mobile: "‹ swipe ›" hint under the stage. The chevron glyphs are compact
+   prev/next buttons (same actions and accessible names as the desktop
+   chevrons) so navigation stays keyboard-reachable at mobile widths, where
+   the flanking chevrons are display:none. */
 .detail__hint {
   display: flex;
   align-items: center;
@@ -1392,11 +1577,15 @@ img {
   color: var(--color-stage-text);
 }
 
-/* Touch floor (§7.3, WCAG 2.5.8): the hit box is a 44x44 border-box; the
+/* §4.4: the hint text sits at stage text 0.72 ("10.32:1 seat"). */
+.detail__hint-text {
+  opacity: 0.72;
+}
+
+/* Touch floor (WCAG 2.5.8): the hit box is a 44x44 border-box; the
    symmetric negative margin returns the layout footprint to the original
-   32x32 pill so the §9d hint row looks unchanged. The hover circle keeps
-   its 32px visual size via the ::before layer (painted behind the glyph,
-   exactly where the old button background sat). */
+   32x32 pill so the hint row looks unchanged. The hover circle keeps its
+   32px visual size via the ::before layer (painted behind the glyph). */
 .detail__hint-nav {
   position: relative;
   display: inline-flex;
@@ -1441,20 +1630,30 @@ img {
   background: transparent;
 }
 
+/* Bottom bar (§4.4): same glass treatment as the top bar, hairline top. */
 .detail__bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-12);
   padding: var(--space-12) var(--space-16) calc(var(--space-12) + env(safe-area-inset-bottom));
+  background: var(--glass-stage);
+  -webkit-backdrop-filter: blur(20px) saturate(var(--glass-saturate));
+  backdrop-filter: blur(20px) saturate(var(--glass-saturate));
+  border-top: 1px solid var(--color-hairline);
 }
 
-/* Stage chip: dot + number + band word in the stage band tokens (§8.2). */
+/* Stage chip (§4.4): a pill — translucent white fill, hairline border,
+   dot + number + band word in the stage band tokens. */
 .detail__chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-8);
   min-width: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
   font-size: var(--text-footnote);
   line-height: var(--line-footnote);
   letter-spacing: var(--track-footnote);
@@ -1463,11 +1662,14 @@ img {
 }
 
 .detail__chip-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  background: var(--color-fill-pressed);
+  /* Review finding 4: the chip now sits on a translucent-white pill over
+     the stage-glass bar — the old control-fill dot was invisible there.
+     Band classes always override this; it is only the neutral fallback. */
+  background: rgba(255, 255, 255, 0.30);
 }
 
 .detail__chip-word {
@@ -1500,33 +1702,33 @@ img {
   background: var(--color-band-sharp-stage);
 }
 
-/* §12: on the dark stage the focus ring uses the stage text color. */
+/* §7 focus system: on the dark stage the focus ring uses the stage text. */
 .detail :focus-visible {
   outline-color: var(--color-stage-text);
 }
 
-/* ...but controls on WHITE cards inside the stage (the converter panel)
-   keep the standard accent ring — stage text (white) would be invisible on
-   the card fill (§12 ring rule is a stage rule, not a card rule). */
+/* ...but controls on SOLID cards inside the stage (the converter panel)
+   keep the accent ring — stage text (white) would be invisible on the
+   card fill (the ring rule is a stage rule, not a card rule). */
 .hd-panel :focus-visible,
 .hd-dialog :focus-visible {
   outline-color: var(--color-accent-text);
 }
 
 /* --------------------------------------------------------------------------
-    Phase R5 — §11.3 HD converter (per-photo panel + batch dialog)
+    HD converter (per-photo panel + batch dialog) — §4.6
     -------------------------------------------------------------------------- */
 
-/* §11.3.2 inline panel: a white card on the dark stage, directly above the
-   bottom bar. Entrance: fade only (the notice-card entrance — it is an
-   expansion, not a new layer). Every token below is a certified white-
-   surface pair (§11.6.7) — zero new hex. */
+/* §4.6 inline panel: a SOLID card on the dark stage (not glass — its muted
+   copy must pass), directly above the bottom bar. Entrance: fade only (it
+   is an expansion, not a new layer). */
 .hd-panel {
   margin: var(--space-8) var(--space-16) 0;
-  padding: var(--space-16);
+  padding: var(--space-20);
   background: var(--color-surface);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2), inset 0 1px 0 var(--edge-highlight);
   color: var(--color-text);
   animation: hd-fade-in var(--duration-standard) var(--ease-standard);
 }
@@ -1556,8 +1758,8 @@ img {
   color: var(--color-text);
 }
 
-/* §11.3.2 readout row: "Original W × H · Output W′ × H′". Mono + tabular;
-   wraps under the Original group at narrow widths (the §11.7b wireframe). */
+/* Readout row: "Original W × H · Output W′ × H′". Mono 15 + tabular;
+   wraps under the Original group at narrow widths. */
 .hd-readout {
   display: flex;
   flex-wrap: wrap;
@@ -1591,9 +1793,9 @@ img {
   color: var(--color-text-muted);
 }
 
-/* §11.4 the mandated window: a one-line clipped box. The hidden sizer
-   reflows the width instantly to the NEW value (never transitioned); the
-   lines slide transform-only. */
+/* The mandated window: a one-line clipped box. The hidden sizer reflows the
+   width instantly to the NEW value (never transitioned); the lines slide
+   transform-only. */
 .hd-readout__window {
   position: relative;
   display: inline-block;
@@ -1615,8 +1817,8 @@ img {
   transition: transform var(--duration-standard) var(--ease-standard);
 }
 
-/* §11.3.2 slider row: 44px hit row, 20px accent thumb, filled track = the
-   sanctioned accent hard-stop two-color background (§10.4 reading). */
+/* §4.6 slider row: 44px hit row; 4px track — filled portion in
+   --color-accent-text, rest in --color-track. */
 .hd-slider {
   display: flex;
   align-items: center;
@@ -1650,11 +1852,13 @@ img {
     to right,
     var(--color-accent-text) 0%,
     var(--color-accent-text) var(--hd-fill, 0%),
-    var(--color-fill-pressed) var(--hd-fill, 0%),
-    var(--color-fill-pressed) 100%
+    var(--color-track) var(--hd-fill, 0%),
+    var(--color-track) 100%
   );
 }
 
+/* §6.10: the thumb is accent-text (6.05:1 vs the track) with a dark
+   contour ring — the old accent thumb measured under 3:1 vs its track. */
 .hd-slider__input::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 20px;
@@ -1662,13 +1866,14 @@ img {
   margin-top: -8px; /* center the 20px thumb on the 4px track */
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-accent-text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.40);
 }
 
 .hd-slider__input::-moz-range-track {
   height: 4px;
   border-radius: var(--radius-full);
-  background: var(--color-fill-pressed);
+  background: var(--color-track);
 }
 
 .hd-slider__input::-moz-range-progress {
@@ -1682,7 +1887,8 @@ img {
   height: 20px;
   border: 0;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-accent-text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.40);
 }
 
 .hd-slider__value {
@@ -1696,7 +1902,7 @@ img {
   color: var(--color-text);
 }
 
-/* §11.3.5 captions inside the converter surfaces. */
+/* §4.6 captions inside the converter surfaces (solid fill — muted passes). */
 .hd-copy {
   margin: var(--space-8) 0 0;
   font-size: var(--text-footnote);
@@ -1736,9 +1942,8 @@ img {
   line-height: var(--line-footnote);
 }
 
-/* §11.3.4 batch converter dialog: same card composition as the §11.5
-   dialogs (white card over the scrim; mobile rise+fade, desktop fade +
-   scale 0.98→1 — the §4.6 modal entrance, reused keyframes). */
+/* §4.7 batch converter dialog: glass dialog surface over the blurred scrim
+   (mobile rise+fade, desktop fade + scale 0.98→1 — reused keyframes). */
 .hd-dialog {
   position: fixed;
   inset: 0;
@@ -1747,6 +1952,8 @@ img {
   align-items: center;
   justify-content: center;
   background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   animation: detail-fade var(--duration-slow) var(--ease-standard);
   padding: var(--space-16);
 }
@@ -1756,13 +1963,23 @@ img {
   max-height: calc(100svh - 32px);
   overflow-y: auto;
   padding: var(--space-20);
-  background: var(--color-surface);
+  background: var(--glass-dialog);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-floating);
+  box-shadow: var(--shadow-3);
   outline: none;
   color: var(--color-text);
   animation: sheet-rise var(--duration-slow) var(--ease-standard);
+}
+
+/* Shared dialog-glass fallback (§2: solid --color-surface-raised). */
+@supports not ((backdrop-filter: blur(24px)) or (-webkit-backdrop-filter: blur(24px))) {
+  .hd-dialog__panel,
+  .confirm__panel {
+    background: var(--color-surface-raised);
+  }
 }
 
 @media (min-width: 768px) {
@@ -1844,8 +2061,18 @@ img {
   text-overflow: ellipsis;
 }
 
+/* §2.2 usage rule: --color-text-muted is allowed on SOLID surfaces only —
+   the batch dialog is dialog GLASS and shares the panel's muted copy rows,
+   so those lines step up to --color-text-secondary (5.5:1 on the dialog
+   worst case; muted would measure 3.4:1). Applies to .hd-copy--muted
+   (scope/helper) and the current-filename line. */
+.hd-dialog__panel .hd-copy--muted,
+.hd-dialog__panel .hd-progress__name {
+  color: var(--color-text-secondary);
+}
+
 /* --------------------------------------------------------------------------
-   Responsive system (§7.2, §7.3). Mobile-first, 375px design base.
+   Responsive system (§7). Mobile-first, 375px design base.
    -------------------------------------------------------------------------- */
 @media (min-width: 480px) {
   .photo-grid { grid-template-columns: repeat(4, 1fr); }
@@ -1858,14 +2085,14 @@ img {
 @media (min-width: 768px) {
   :root {
     --page-pad: var(--space-24);
+    --header-h: 56px; /* §3: header grows at ≥768 */
   }
 
   .photo-grid { grid-template-columns: repeat(7, 1fr); }
 
-  /* Text content caps at 960px (§7.1). The photo grid itself runs wider —
-     the view-root keeps its 1200px cap so the grid reaches it (§7.1, §9c),
-     and the gallery toolbar aligns to the grid edge like §8.1 band headers.
-     The undecodable notice spans the 960px content width (§9e desktop note). */
+  /* Text content caps at 960px. The photo grid itself runs wider — the
+     view-root keeps its 1200px cap, and the gallery toolbar aligns to the
+     grid edge. The undecodable notice spans the 960px content width. */
   .notice {
     max-width: 960px;
   }
@@ -1874,8 +2101,24 @@ img {
     max-width: 1200px;
   }
 
-  .results {
-    padding-bottom: 128px;
+  /* §6.3: the old fixed 128px .results clearance override is DELETED — the
+     base calc(var(--action-bar-h) + 24) tracks the real floating pill via
+     the bar's ResizeObserver. */
+
+  /* §4.3 desktop action bar: a floating glass pill, centered. The centering
+     uses the standalone `translate` property (not `transform`) because the
+     rise-in entrance animates `transform` and would otherwise cancel the
+     centering mid-flight. */
+  .action-bar {
+    left: 50%;
+    right: auto;
+    translate: -50% 0;
+    bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
+    width: min(1040px, calc(100vw - 48px));
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-xl);
+    padding: var(--space-12) var(--space-16);
+    box-shadow: var(--shadow-3), inset 0 1px 0 var(--edge-highlight);
   }
 
   .action-bar__row {
@@ -1889,15 +2132,13 @@ img {
     flex: 0 1 auto;
   }
 
-  /* Detail view: centered modal, max 960×640, over the scrim (§9d).
-     Fades and scales 0.98 → 1 instead of the mobile sheet rise.
-     Elevation per §5.3: --shadow-floating belongs to the action bar and
-     the desktop modal. */
+  /* Detail view: centered modal, min(960 × 680), over the scrim. Fades and
+     scales 0.98 → 1 instead of the mobile sheet rise. */
   .detail__panel {
     width: min(960px, calc(100vw - 48px));
-    height: min(640px, calc(100vh - 48px));
+    height: min(680px, calc(100vh - 48px));
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-floating);
+    box-shadow: var(--shadow-3);
     animation-name: modal-pop;
   }
 
@@ -1912,9 +2153,9 @@ img {
     }
   }
 
-  /* Desktop title bar: filename left, then Select, then Done (§9d wireframe)
-     — the same DOM reordered with flex order. The size caption follows its
-     filename inside the same wrapper. */
+  /* Desktop title bar: filename left, then Select, then Done — the same DOM
+     reordered with flex order. The size caption follows its filename inside
+     the same wrapper. */
   .detail__name-wrap {
     order: 1;
     text-align: left;
@@ -1932,25 +2173,27 @@ img {
     order: 3;
   }
 
+  /* §4.4 prev/next: glass circles — translucent fill + hairline; hover
+     thickens the fill, never the border. */
   .detail__nav {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    /* 44×44 base (§6): coarse pointers keep this at every width; the
-       fine-pointer density block below shrinks it to 36×36. */
+    /* 44×44 base: coarse pointers keep this at every width; the fine-pointer
+       density block below shrinks it to 36×36. */
     width: 44px;
     height: 44px;
     flex-shrink: 0;
     padding: 0;
-    border: 0;
+    border: 1px solid var(--color-hairline);
     border-radius: var(--radius-full);
-    background: transparent;
+    background: rgba(255, 255, 255, 0.08);
     color: var(--color-stage-text);
     cursor: pointer;
   }
 
   .detail__nav:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.14);
   }
 
   .detail__nav:disabled {
@@ -1958,19 +2201,23 @@ img {
     cursor: default;
   }
 
-  /* Desktop has no hint: chevrons flank the stage instead (§9d wireframe). */
+  /* Desktop has no hint: chevrons flank the stage instead. */
   .detail__hint {
     display: none;
   }
 
-  /* Empty state: card centers vertically, gains max-width 480px;
-     the two buttons sit side by side (§7.3, §9a). */
+  /* Empty state: the outer section centers a 560px card vertically; the
+     card itself carries the width and padding (48px at desktop). The two
+     buttons sit side by side. */
   .empty-state {
     justify-content: center;
     min-height: calc(100svh - var(--header-h));
-    max-width: 480px;
     margin-inline: auto;
     padding: var(--space-32) 0;
+  }
+
+  .empty-state__card {
+    padding: 48px;
   }
 
   .empty-state__actions {
@@ -1983,29 +2230,39 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Phase R6 — §11.5 session delete + recommendations
+   Session delete + recommendations (§4.3/§4.8)
    -------------------------------------------------------------------------- */
 
-/* §11.5.5 per-tile "Suggested" badge: text-only pill on every Blurry tile,
-   top-LEFT (the selection checkmark owns the top-right). aria-hidden
-   decoration — the tile button's accessible name carries the fact. */
+/* Per-tile "Suggested" badge: glass pill on every Blurry tile, top-LEFT
+   (the selection checkmark owns the top-right). aria-hidden decoration —
+   the tile button's accessible name carries the fact. */
 .tile__suggested {
   position: absolute;
   top: var(--space-8);
   left: var(--space-8);
   padding: 2px var(--space-8);
-  background: var(--color-surface);
+  background: rgba(10, 12, 16, 0.78);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--color-text-secondary);
   font-size: var(--text-caption-2);
   line-height: var(--line-caption-2);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   pointer-events: none;
 }
 
-/* §11.5.2 per-tile "Delete": third meta row under every tile, right-
-   aligned, NEUTRAL (not red, not accent — the danger lives in the dialog). */
+@supports not ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
+  .tile__suggested {
+    background: var(--color-surface-raised);
+  }
+}
+
+/* Per-tile "Delete": third meta row under every tile, right-aligned,
+   NEUTRAL (not red, not accent — the danger lives in the dialog). */
 .tile__delete-row {
   display: flex;
   justify-content: flex-end;
@@ -2013,32 +2270,36 @@ img {
 
 .tile__delete {
   min-height: 44px;
-  min-width: 44px; /* R3-4: caption text alone is ~36px wide — keep the coarse 44px box in BOTH axes */
+  min-width: 44px; /* caption text alone is ~36px wide — keep the coarse 44px box in BOTH axes */
   padding: 0 var(--space-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-secondary);
-  /* Hierarchy pass: the per-tile Delete is a TERTIARY action — caption
-     size, regular weight (it inherited .btn-text's 17px/600 headline
-     styling and dominated every tile). */
+  /* The per-tile Delete is a TERTIARY action — caption size, regular
+     weight (it would otherwise inherit .btn-text's 17px/600 headline). */
   font-size: var(--text-caption-1);
   line-height: var(--line-caption-1);
   font-weight: 400;
 }
 
-/* §11.5.2 detail "Delete": the ONE red control outside the dialog — the
-   stage band token (5.23:1 on --color-stage; the white-surface red would
-   be ≈2.75:1 here). Focus ring follows the existing stage rule
+@media (hover: hover) {
+  .tile__delete:hover {
+    color: var(--color-text); /* §4.3: hover raises the tertiary ink */
+  }
+}
+
+/* Detail "Delete": the ONE red control outside the dialog — the stage band
+   token (7.23:1 on --color-stage). Focus ring follows the stage rule
    (.detail :focus-visible → --color-stage-text). */
 .detail__delete {
   color: var(--color-band-blurry-stage);
 }
 
-/* §11.5.3 the confirmation dialog: compact white card over the scrim,
-   max-width 400px on BOTH breakpoints (mobile floats as a card with 16px
-   margins — never a full-screen sheet). Stacks OVER the detail modal
-   (§11.5.3 rule 6): z-index 60 > the detail's 50. */
+/* §4.7/§4.8 confirmation dialog: glass dialog surface over the blurred
+   scrim, min(400px, 100%) on BOTH breakpoints (mobile floats as a card with
+   16px margins — never a full-screen sheet). Stacks OVER the detail modal:
+   z-index 60 > the detail's 50. */
 .confirm {
   position: fixed;
   inset: 0;
@@ -2047,16 +2308,19 @@ img {
   place-items: center;
   padding: var(--space-16);
   background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .confirm__panel {
-  width: 100%;
-  max-width: 400px;
-  background: var(--color-surface);
+  width: min(400px, 100%);
+  padding: var(--space-20);
+  background: var(--glass-dialog);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-floating);
-  padding: var(--space-20);
+  box-shadow: var(--shadow-3);
   animation: confirm-in var(--duration-slow) var(--ease-standard);
 }
 
@@ -2116,9 +2380,11 @@ img {
   color: var(--color-text-secondary);
 }
 
+/* §4.8 file list: mono 12 secondary on a hairline left rule. */
 .confirm__list {
   margin: var(--space-8) 0 0;
-  padding-left: var(--space-16);
+  padding-left: var(--space-12);
+  border-left: 1px solid var(--color-hairline);
   list-style: none;
 }
 
@@ -2137,14 +2403,29 @@ img {
   margin-top: var(--space-16);
 }
 
-/* §11.5.3 destructive confirm: red TEXT on the white card (HIG: never the
-   primary/accent role), inheriting every .btn-text state (§5 one-token
-   rule). Zero new hex — --color-band-blurry-text, §4.9 pair 20: 6.52:1. */
+/* §4.8: the dialog action row uses a ghost secondary (Cancel) — the delete
+   stays a red text button. */
+.confirm__actions .btn-secondary {
+  background: transparent;
+  border: 1px solid var(--color-hairline);
+  color: var(--color-text-secondary);
+}
+
+@media (hover: hover) {
+  .confirm__actions .btn-secondary:hover {
+    background: var(--color-hover-overlay);
+    color: var(--color-text);
+  }
+}
+
+/* Destructive confirm: red TEXT (HIG: never the primary/accent role),
+   inheriting every .btn-text state. --color-band-blurry-text measures
+   ≈5.7:1 on the dialog-glass worst case (§2.1). */
 .btn-delete {
   color: var(--color-band-blurry-text);
 }
 
-/* §4.6 modal entrance desktop variant: fade + scale 0.98→1 (mobile rises). */
+/* Modal entrance desktop variant: fade + scale 0.98→1 (mobile rises). */
 @media (min-width: 768px) {
   .confirm__panel {
     animation-name: confirm-in-desktop;
@@ -2170,10 +2451,15 @@ img {
   color: var(--color-text-secondary);
 }
 
+/* §4.6 segmented pill group: a translucent tray with a hairline. */
 .choice-row__group {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-full);
 }
 
 /* The radio input is visually hidden but stays keyboard-focusable — the
@@ -2192,9 +2478,9 @@ img {
   align-items: center;
   min-height: 32px;
   padding: 0 var(--space-12);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid transparent;
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: transparent;
   font-size: var(--text-footnote);
   line-height: var(--line-footnote);
   font-weight: 600;
@@ -2202,18 +2488,27 @@ img {
   cursor: pointer;
 }
 
+/* Checked (§4.6): raised muted fill + accent-text label/border (6.8:1). */
 .choice-row__input:checked + .choice-row__pill {
-  border-color: var(--color-accent);
+  border-color: var(--color-accent-text);
   color: var(--color-accent-text);
-  background: var(--color-accent-subtle);
+  background: var(--color-surface-muted);
 }
 
 .choice-row__input:focus-visible + .choice-row__pill {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-accent-text);
   outline-offset: 2px;
 }
 
-/* The HD preview action row (Download / Discard under the panel). */
+/* §4.6 hover (fine pointers): only an IDLE pill lifts its label to text. */
+@media (hover: hover) and (pointer: fine) {
+  .choice-row__input:not(:checked) + .choice-row__pill:hover {
+    color: var(--color-text);
+  }
+}
+
+/* The HD preview action row: Keep in review = primary; Download / Discard
+   = ghost secondaries (§4.3 treatment). */
 .hd-preview__actions {
   display: flex;
   flex-wrap: wrap;
@@ -2221,37 +2516,85 @@ img {
   margin-top: var(--space-8);
 }
 
-/* The export chooser's option buttons: full-width rows with the label
-   left and the "last used" hint right. */
+.hd-preview__actions .btn-secondary {
+  background: transparent;
+  border: 1px solid var(--color-hairline);
+  color: var(--color-text-secondary);
+}
+
+@media (hover: hover) {
+  .hd-preview__actions .btn-secondary:hover {
+    background: var(--color-hover-overlay);
+    color: var(--color-text);
+  }
+}
+
+/* §4.7 export chooser options: full-width rows, transparent fill + hairline
+   border, label 15/600 in --color-text, "last used" hint right. */
 .export-choice {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   margin-bottom: var(--space-8);
+  background: transparent;
+  border: 1px solid var(--color-hairline);
+  color: var(--color-text);
 }
 
+.export-choice__label {
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .export-choice:hover {
+    background: var(--color-hover-overlay);
+  }
+}
+
+.export-choice:active {
+  background: var(--color-hover-overlay);
+  transform: scale(0.98);
+}
+
+/* §6.6 fix: the hint was muted-on-surface-muted (4.05:1); the mini-pill
+   now carries --color-text-secondary (7.11:1 worst case). */
 .export-choice__hint {
-  font-size: var(--text-caption-1);
-  color: var(--color-text-muted);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-2);
+  line-height: var(--line-caption-2);
+  letter-spacing: var(--track-caption-2);
+  font-weight: 600;
 }
 
-/* Pointer-device density (§7.3, as amended by design-spec-v2 §6): the 32/36px
-   sizes apply ONLY when the pointer is fine. A coarse pointer (tablet) keeps
-   the 44px base values at every viewport width — no coarse override exists,
-   because the base rules already carry 44px everywhere. */
+/* Pointer-device density (§7): the 32/36px sizes apply ONLY when the pointer
+   is fine. A coarse pointer (tablet) keeps the 44px base values at every
+   viewport width — no coarse override exists, because the base rules already
+   carry 44px everywhere. */
 @media (min-width: 768px) and (pointer: fine) {
-  /* Hero CTA excluded (design-spec-v2 §6): the hero keeps its 48px height at
-     every breakpoint, so .btn-hero must not match this density rule — the
-     block sits at the end of the file and would otherwise override it. */
+  /* Hero CTA excluded: the hero keeps its 48px height at every breakpoint,
+     so .btn-hero must not match this density rule. */
   .btn-primary:not(.btn-hero),
   .btn-secondary {
     min-height: 36px;
   }
 
-  /* The one size modifier (design-spec-v2 §5): markup adds btn-text--compact
-     where the 32px pointer density applies (toolbar "Add more", the notice
-     summary). Never applied on coarse pointers — the .btn-text base holds. */
+  /* Explicit 44px surfaces keep their height on fine pointers (§4.6/§4.7):
+     the converter Apply buttons (panel + batch dialog) and the export
+     options. Same specificity as the shrink rule, later in source. */
+  .btn-primary.hd-panel__apply,
+  .btn-primary.hd-dialog__apply,
+  .btn-secondary.export-choice {
+    min-height: 44px;
+  }
+
+  /* The one size modifier: markup adds btn-text--compact where the 32px
+     pointer density applies (toolbar "Add more", the notice summary).
+     Never applied on coarse pointers — the .btn-text base holds. */
   .btn-text--compact {
     min-height: 32px;
   }
@@ -2261,8 +2604,8 @@ img {
     min-height: 32px;
   }
 
-  /* §11.5.2: per-tile Delete follows the band__toggle density precedent;
-     the detail and dialog Delete buttons follow button metrics (36px). */
+  /* Per-tile Delete follows the band__toggle density precedent; the detail
+     and dialog Delete buttons follow button metrics (36px). */
   .tile__delete {
     min-height: 32px;
   }
@@ -2291,7 +2634,9 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Reduced motion (§12): all transitions/animations collapse to 1ms.
+   Reduced motion (§7): all transitions/animations collapse to 1ms; the
+   entrance family switches off outright — collapse alone is not enough for
+   the staggers (see below).
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -2301,49 +2646,33 @@ img {
     animation-duration: 1ms !important;
   }
 
-  /* §12 disables the band reveal and sheet rise outright — collapsing the
-     duration to 1ms is not enough: ResultsView sets inline animation-delay
-     staggers (0–250ms) on .band--reveal sections and their tiles, and inline
-     delays survive the duration collapse while fill-mode: backwards holds
-     each element at opacity 0 / translateY(8px), so the staggered cascade
-     still runs. animation: none also resets delay/fill, and !important
-     overrides those inline delays. .detail__panel carries sheet-rise (§9d,
-     mobile) and its desktop modal-pop swap. */
+  /* Collapsing the duration to 1ms is not enough for the band reveal:
+     ResultsView sets inline animation-delay staggers (0–250ms) on
+     .band--reveal sections and their tiles, and inline delays survive the
+     duration collapse while fill-mode: backwards holds each element at
+     opacity 0 / translateY(8px) — the cascade would still run. animation:
+     none resets delay/fill, and !important overrides the inline delays.
+     The entrance family (rise-in consumers: .results, .action-bar,
+     .empty-state + its card, .progress-card, .tile) and the dialog/sheet
+     entrances collapse too (§7 list, extended). */
   .band--reveal,
   .band--reveal .tile,
-  .detail__panel {
-    animation: none !important;
-  }
-
-  /* Motion pass (2026-11-06): shared entrance for the app's three surfaces
-     (empty state, pending/results, action bar) — fade + 12px rise, once per
-     mount, transform + opacity only (§6.2 entrance family). */
-  @keyframes rise-in {
-    from {
-      opacity: 0;
-      transform: translateY(12px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  /* §11.5.3: the confirm dialog's entrance collapses too (the dialog must
-     never animate under reduced motion — the removal itself is instant
-     per §11.5.1). */
+  .detail__panel,
   .confirm__panel,
   .results,
   .action-bar,
-  .empty-state {
+  .empty-state,
+  .empty-state__card,
+  .progress-card,
+  .tile {
     animation: none !important;
   }
 
-  /* §11.4/§11.6.6: the resolution number-slide collapses to an instant,
-     crossfade-free text swap. The HDPanelView JS also short-circuits the
-     slide under reduced motion (no transform is ever applied); this rule
-     is the CSS-side guarantee that even a racing input event cannot run a
-     visible 1ms slide. */
+  /* The resolution number-slide collapses to an instant, crossfade-free
+     text swap. The HDPanelView JS also short-circuits the slide under
+     reduced motion (no transform is ever applied); this rule is the
+     CSS-side guarantee that even a racing input event cannot run a visible
+     1ms slide. */
   .hd-readout__line {
     transition: none !important;
   }

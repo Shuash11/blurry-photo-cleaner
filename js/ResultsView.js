@@ -747,6 +747,9 @@ class PhotoDetailView {
     });
     // Inline panel, directly above the bottom bar (§11.3.2).
     this.#panel.insertBefore(this.#hdPanel.el, this.#bottomEl);
+    // design-spec-v3 §5.2/§6.2: cap the stage while the panel is open so
+    // the panel never overlaps the photo (removed on close / navigation).
+    this.#panel.classList.add("has-hd-panel");
     this.#hdPanel.focusSlider();
   }
 
@@ -877,6 +880,8 @@ class PhotoDetailView {
     // v0.3.0: the panel owns the preview URL (destroy revokes it) — the
     // stage must point back at the original BEFORE it dies.
     this.#showPreviewStage(null);
+    // design-spec-v3 §5.2: the stage cap class leaves with the panel.
+    this.#panel.classList.remove("has-hd-panel");
     this.#hdPanel?.destroy();
     this.#hdPanel = null;
     this.#restoreDownloadRole();
@@ -1176,6 +1181,9 @@ class PhotoDetailView {
     this.#showPreviewStage(null);
     this.#hdPanel?.destroy();
     this.#hdPanel = null;
+    // design-spec-v3 §5.2: photo navigation also clears the stage-cap class
+    // (same reset group as the panel teardown above).
+    this.#panel.classList.remove("has-hd-panel");
     this.#restoreDownloadRole();
     this.#saveHdBtn?.remove();
     this.#saveHdBtn = null;
@@ -1738,9 +1746,17 @@ class HDPanelView {
      ------------------------------------------------------------------ */
 
   #formatLine() {
-    const spec = hdOutputSpec(this.#photo.name);
+    // design-spec-v3 §6.12 fix: pass the user's chosen format — the old call
+    // derived the spec from the source name only (a JPEG/WebP selection on a
+    // PNG source kept showing the PNG line). This is the same hdOutputSpec
+    // call the convert path's naming uses, so the readout can never drift
+    // from the encode.
+    const spec = hdOutputSpec(this.#photo.name, this.#format);
     if (spec.mime === "image/png") {
       return `Saved as ${spec.name} · PNG`;
+    }
+    if (spec.mime === "image/webp") {
+      return `Saved as ${spec.name} · WebP`;
     }
     // "quality 92" derives from the JPEG_QUALITY constant (MAX_FILE_LABEL
     // precedent — the copy can never drift from the enforced value).

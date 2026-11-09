@@ -22,10 +22,10 @@
  *         downloads, busy state, live announcements) → detail open/navigate/
  *         close (Escape + focus return) → Start over (confirm + URL revocation).
  *         Zero console errors at every step.
- *   R3-2  Visual tokens (programmatic): body bg rgb(242,243,245); accent fill
- *         rgb(46,92,149); focus ring 2px rgb(46,92,149) offset 2 on light and
- *         white on stage; radii tokens ∈ {8,12,18,999} and rendered radii in
- *         the spec set; theme-color meta #141517.
+ *   R3-2  Visual tokens (programmatic): body bg rgb(10,11,13); accent fill
+ *         rgb(66,98,255); focus ring 2px rgb(143,166,255) offset 2 on light
+ *         and white on stage; radii tokens ∈ {8,12,16,20,999} and rendered
+ *         radii in the spec set; theme-color meta #0A0B0D (v3 palette).
  *   R3-3  Scoring identity through the real picker: fixtures → 100/96 sharp,
  *         34/36 blurry, byte-identical on re-run; rendered chips == store.
  *   R3-4  Pointer-gated density: coarse (hasTouch) 375 + 810 → every visible
@@ -77,15 +77,15 @@ const WATCHDOG_MS = 600000;      // whole-run hard cap
 
 const DESKTOP = { width: 1280, height: 800 };
 
-/* v2 spec values under test (design-spec-v2 §4.7 drop-in block) */
+/* v3 spec values under test (design-spec-v3 §2 drop-in block) */
 const V2 = {
-  bg: "rgb(20, 21, 23)",          // --color-bg #141517 (v0.4.0 dark)
-  accent: "rgb(61, 116, 184)",    // --color-accent #3D74B8 (fill)
-  accentText: "rgb(130, 180, 236)", // --color-accent-text #82B4EC (ring/text on dark)
-  mutedFill: "rgb(38, 40, 44)",   // --color-surface-muted #26282C
-  mutedText: "rgb(138, 145, 156)", // --color-text-muted #8A919C
-  text: "rgb(242, 243, 245)",     // --color-text #F2F3F5
-  accentSubtle: "rgba(109, 159, 216, 0.16)",
+  bg: "rgb(10, 11, 13)",          // --color-bg #0A0B0D (v0.5 premium dark glass)
+  accent: "rgb(66, 98, 255)",     // --color-accent #4262FF (fill)
+  accentText: "rgb(143, 166, 255)", // --color-accent-text #8FA6FF (ring/text on dark)
+  mutedFill: "rgb(31, 35, 43)",   // --color-surface-muted #1F232B
+  mutedText: "rgb(129, 138, 151)", // --color-text-muted #818A97
+  text: "rgb(245, 246, 247)",     // --color-text #F5F6F7
+  accentSubtle: "rgba(143, 166, 255, 0.14)",
 };
 
 /* ------------------------------------------------------------------ */
@@ -736,8 +736,8 @@ async function stateR3_2({ page }) {
       themeColor: document.querySelector('meta[name="theme-color"]')?.content ?? null,
     };
   });
-  assert(surface.body === V2.bg, `body background ${surface.body}, expected ${V2.bg} (§4.1 --color-bg)`);
-  assert(surface.themeColor === "#141517", `theme-color meta "${surface.themeColor}", expected #141517 (§4.8)`);
+  assert(surface.body === V2.bg, `body background ${surface.body}, expected ${V2.bg} (§2 --color-bg)`);
+  assert(surface.themeColor === "#0A0B0D", `theme-color meta "${surface.themeColor}", expected #0A0B0D (§5.3)`);
 
   /* accent fill on the hero primary */
   const heroFill = await page.evaluate(() => getComputedStyle(document.querySelector(".btn-hero")).backgroundColor);
@@ -769,7 +769,7 @@ async function stateR3_2({ page }) {
   /* the primary fill has a background-color transition from the disabled
      (surface-muted) fill — wait for the settled enabled accent value. */
   await page.waitForFunction(
-    () => getComputedStyle(document.querySelector(".action-bar__actions .btn-primary")).backgroundColor === "rgb(61, 116, 184)",
+    () => getComputedStyle(document.querySelector(".action-bar__actions .btn-primary")).backgroundColor === "rgb(66, 98, 255)",
     null,
     { timeout: STEP_TIMEOUT, polling: 25 },
   );
@@ -784,7 +784,7 @@ async function stateR3_2({ page }) {
       full: cs.getPropertyValue("--radius-full").trim(),
     };
   });
-  assert(tokenRadii.sm === "8px" && tokenRadii.md === "12px" && tokenRadii.lg === "18px" && tokenRadii.full === "999px", `§4.6 radius tokens ${JSON.stringify(tokenRadii)}`);
+  assert(tokenRadii.sm === "8px" && tokenRadii.md === "12px" && tokenRadii.lg === "16px" && tokenRadii.full === "999px", `§2 radius tokens ${JSON.stringify(tokenRadii)}`);
   const radii = await page.evaluate(() => {
     const vals = {};
     for (const el of document.body.querySelectorAll("*")) {
@@ -798,13 +798,16 @@ async function stateR3_2({ page }) {
     }
     return vals;
   });
-  const allowed = new Set(["4px", "8px", "12px", "18px", "999px", "50%"]); // 4px = nested floor (§4.6)
+  const allowed = new Set(["4px", "8px", "12px", "16px", "20px", "999px", "50%"]); // 4px = nested floor (§2)
   const bad = Object.keys(radii).filter((r) => !allowed.has(r));
-  assert(bad.length === 0, `rendered radii outside the §4.6 set: ${JSON.stringify(bad)} (all: ${JSON.stringify(radii)})`);
-  assert(radii["8px"] && radii["12px"] && radii["18px"], `rendered value set must include 8/12/18px (${JSON.stringify(radii)})`);
+  assert(bad.length === 0, `rendered radii outside the §2 set: ${JSON.stringify(bad)} (all: ${JSON.stringify(radii)})`);
+  /* v3 scale in use at this state: 12px (controls/tiles), 16px (cards),
+     20px (desktop action pill); 8px (radius-sm) is a reserved token and no
+     longer renders here — verified via the printed set. */
+  assert(radii["12px"] && radii["16px"] && radii["20px"], `rendered value set must include 12/16/20px (${JSON.stringify(radii)})`);
   assert(radii["999px"] || radii["50%"], `no full-radius element rendered (${JSON.stringify(radii)})`);
   const bandChipRadius = await page.evaluate(() => getComputedStyle(document.querySelector(".band-chip")).borderRadius);
-  assert(bandChipRadius === "8px", `band chip radius ${bandChipRadius}, expected 8px (§4.6 small controls)`);
+  assert(bandChipRadius === "999px", `band chip radius ${bandChipRadius}, expected 999px (§4.3 pill)`);
   const primaryFill = await page.evaluate(() => getComputedStyle(document.querySelector(".action-bar__actions .btn-primary")).backgroundColor);
   assert(primaryFill === V2.accent, `enabled primary fill ${primaryFill}, expected ${V2.accent}`);
   await shot(page, "09-tokens-results.png");
@@ -1373,7 +1376,7 @@ async function stateR3_8({ page: _unused }) {
     browser = await chromium.launch({ channel: "chrome", headless: true, timeout: 60000 });
 
     await runState("R3-1", "Full user journey: empty → 4 fixtures → analyzing → results → select 2 → download 2 (byte-identical) → detail → start over", {}, stateR3_1);
-    await runState("R3-2", "Visual tokens: surfaces, accent fill, focus rings (light/stage), radii {8,12,18,999}, theme-color", {}, stateR3_2);
+    await runState("R3-2", "Visual tokens: surfaces, accent fill, focus rings (light/stage), radii {8,12,16,20,999}, theme-color", {}, stateR3_2);
     await runState("R3-3", "Scoring identity via real picker: 100/96 sharp, 34/36 blurry, byte-identical re-run", {}, stateR3_3);
     await runState("R3-4", "Pointer-gated density: coarse 375/810 ≥44×44, fine 768/1280 36/32, hero 48 everywhere", {}, stateR3_4);
     await runState("R3-5", "Reduced motion: band reveal + sheet rise disabled, transition durations 1ms", {}, stateR3_5);

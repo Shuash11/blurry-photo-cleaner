@@ -526,10 +526,17 @@ export class UploadView {
     const section = document.createElement("section");
     section.className = failed ? "empty-state empty-state--failed" : "empty-state";
 
+    // design-spec-v3 §5.1: all card contents live inside
+    // .empty-state__card — the outer section keeps the full-height
+    // centering layout while the card carries the glass chrome, so the
+    // card never stretches on desktop. Classes/ARIA/text are unchanged.
+    const card = document.createElement("div");
+    card.className = "empty-state__card";
+
     const icon = document.createElement("span");
     icon.className = "empty-state__icon";
     icon.appendChild(this.#icon(failed ? "warning" : "photo"));
-    section.appendChild(icon);
+    card.appendChild(icon);
 
     const title = document.createElement("h2");
     title.className = "empty-state__title";
@@ -538,7 +545,7 @@ export class UploadView {
       : failed
         ? "Couldn't open those files"
         : "Find the blurry photos";
-    section.appendChild(title);
+    card.appendChild(title);
 
     const body = document.createElement("p");
     body.className = "empty-state__body";
@@ -547,7 +554,7 @@ export class UploadView {
       : failed
         ? "Try JPEG or PNG photos — this browser couldn't decode them. Nothing was changed."
         : "Choose photos from your library — they stay on this device.";
-    section.appendChild(body);
+    card.appendChild(body);
 
     const actions = document.createElement("div");
     actions.className = "empty-state__actions";
@@ -563,18 +570,19 @@ export class UploadView {
       actions.appendChild(this.#buildFolderButton(folderPickMode));
     }
 
-    section.appendChild(actions);
+    card.appendChild(actions);
 
     const hint = document.createElement("p");
     hint.className = "empty-state__drop-hint";
     hint.textContent = "or drop photos here";
-    section.appendChild(hint);
+    card.appendChild(hint);
 
     const privacy = document.createElement("p");
     privacy.className = "empty-state__privacy";
     privacy.textContent = "Photos never leave this device.";
-    section.appendChild(privacy);
+    card.appendChild(privacy);
 
+    section.appendChild(card);
     return section;
   }
 
