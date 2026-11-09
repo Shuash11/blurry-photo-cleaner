@@ -539,6 +539,16 @@ img {
   margin-top: var(--space-32);
 }
 
+/* Design feedback (2026-11-09): in this paired row the secondary must match
+   the hero's 48px. The fine-pointer density rule shrank .btn-secondary to
+   36px while .btn-hero is exempt at 48 — two buttons of different heights
+   side by side read as misaligned. Higher specificity (0,2,0) than the
+   density rule (0,1,0), so this holds at every pointer/breakpoint; the
+   ≥44px coarse floor still passes (48 > 44). */
+.empty-state__actions .btn-secondary {
+  min-height: 48px;
+}
+
 .empty-state__drop-hint {
   margin: var(--space-16) 0 0;
   font-size: var(--text-subhead);
