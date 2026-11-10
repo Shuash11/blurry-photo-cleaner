@@ -523,7 +523,10 @@ img {
 }
 
 .empty-state__body {
-  margin: var(--space-12) 0 0;
+  /* margin-inline: auto centers the 34ch box in the card — as a child of
+     the (block) card it no longer inherits the flex-item centering it had
+     under the .empty-state column. Measured -75px off-center without it. */
+  margin: var(--space-12) auto 0;
   max-width: 34ch;
   font-size: var(--text-body);
   line-height: var(--line-body);
@@ -535,6 +538,10 @@ img {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Desktop row: center the button pair in the card (measured -154px
+     off-center without it — the card wrapper broke the old flex-item
+     centering chain). No-op for the mobile column. */
+  justify-content: center;
   gap: var(--space-12);
   margin-top: var(--space-32);
 }
