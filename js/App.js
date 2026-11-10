@@ -25,12 +25,13 @@
 
 import { BlurAnalyzer } from "./BlurAnalyzer.js";
 import { HDConverter } from "./HDConverter.js";
-import { ResultsView } from "./ResultsView.js";
+import { ResultsView, BAND_LABELS, hdCopyRating } from "./ResultsView.js";
 import { ReviewControls } from "./ReviewControls.js";
 import {
   BAND_BLURRY,
   BAND_REVIEW,
   BAND_SHARP,
+  BAND_SKIPPED,
   MAX_BATCH_FILES,
   MAX_FILE_BYTES,
   formatPercent,
@@ -94,9 +95,22 @@ export class App {
         announce: (text) => this.#view.announce(text),
         // §11.5.4: the dialog confirmed — App performs the removal.
         onDeletePhotos: (ids) => this.#deletePhotos(ids),
-        // v0.3.0 (user request): a downloaded HD copy is scored fresh and
-        // enters the review next to its original — the auto-reband flow.
-        onAddHDRecord: (blob, name) => this.#addHDRecord(blob, name),
+        // v0.3.0 (user request): a downloaded/kept HD copy enters the
+        // review next to its original — the auto-reband flow. v0.5.3
+        // (plan §9): the payload { blob, name, analysis, sharpening,
+        // original } carries the rating rule's inputs. The catch is the
+        // §8.2 never-silent net (a copy that fails to decode — it decoded
+        // at preview time, so this is near-impossible — surfaces visibly
+        // instead of dying as an unhandled rejection).
+        onAddHDRecord: (payload) =>
+          this.#addHDRecord(payload).catch(() => {
+            this.#view.showError({
+              body: "The HD copy couldn't be added to the review. The download itself was not affected.",
+            });
+          }),
+        // v0.5.3 (plan §9): the HD panel asks for a real preview score —
+        // a transient analyzer pass, nothing enters the store.
+        onScorePreview: (blob) => this.#scorePreview(blob),
       },
     });
     this.#reviewControls = new ReviewControls({
@@ -439,18 +453,50 @@ export class App {
   }
 
   /**
+   * v0.5.3 (plan §9): score ONE HD preview blob WITHOUT storing anything —
+   * a transient record through the same analyzer, so the panel's number is
+   * measured exactly like a stored copy's would be (same bytes, same worker
+   * → the same result). Resolves { score, band } or null: a skip or a
+   * failure stays honest — the panel renders "could not be scored", never a
+   * fabricated number. The decode path releases its own bitmap/object URL
+   * (BlurAnalyzer.prepareAnalysisInput), and no thumbnail is ever created
+   * here, so there is nothing left to revoke.
+   */
+  async #scorePreview(blob) {
+    const file = new File([blob], "hd-preview", { type: blob.type });
+    const transient = { id: "hd-preview", file, name: file.name };
+    let analysis = null;
+    try {
+      await this.#analyzer.analyzeAll([transient], {
+        onResult: (_photo, result) => {
+          analysis = { score: result.score, band: result.band };
+        },
+        // A skip leaves analysis null — the panel reports it honestly.
+      });
+    } catch {
+      analysis = null; // scorer unavailable — the panel's honest fallback
+    }
+    return analysis;
+  }
+
+  /**
    * v0.3.0 auto-reband (user request: "if the image was improved due to the
    * converter then it should automatically go to what level of sharpness it
-   * belongs"): a DOWNLOADED HD copy enters the review as its own record —
-   * decoded, thumbnailed, scored fresh by the analyzer, and banded exactly
-   * where the sharpened pixels actually land. It appears NEXT TO its
-   * original (both stay; the user decides which to keep). The copy is
-   * queued on the same serialization pipeline as every other store change,
-   * so it can never race a clear() or a running batch.
+   * belongs"): a downloaded/kept HD copy enters the review as its own
+   * record — decoded, thumbnailed, rated, and banded where its rating says
+   * it belongs. It appears NEXT TO its original (both stay; the user
+   * decides which to keep). The copy is queued on the same serialization
+   * pipeline as every other store change, so it can never race a clear() or
+   * a running batch.
+   *
+   * NOTE (v0.5.3): DEAD entry point — nothing calls it (the detail panel's
+   * Keep/Download go through onAddHDRecord, which carries the full rating
+   * payload). Kept per plan §9 ("leave; do not delete"); adapted to the
+   * current payload shape so a future caller cannot crash it.
    */
   addHDToReview(blob, name) {
     this.#queue = this.#queue
-      .then(() => this.#addHDRecord(blob, name))
+      .then(() => this.#addHDRecord({ blob, name }))
       .catch(() => {
         // A copy that fails to decode (it decoded at preview time, so this
         // is near-impossible) surfaces in the generic §8.2 notice.
@@ -460,36 +506,59 @@ export class App {
       });
   }
 
-  async #addHDRecord(blob, name) {
+  /**
+   * v0.5.3 (plan §9): the copy's rating follows the ONE shared policy —
+   * hdCopyRating (ResultsView): sharpening Off + a panel-measured analysis
+   * + a scored original SNAPS the copy to the original's exact score/band
+   * (a pure enlargement cannot add detail); otherwise the measured analysis
+   * is reused. A null analysis (scoring failed / preview never scored)
+   * falls back to the existing direct-analyze path, WITHOUT the §9b
+   * progress-card route (the detail view is open on the original and a full
+   * pipeline re-render would fight its DOM). Scoring is best-effort: a copy
+   * that still ends up unscored renders "—" and the announcement SAYS so —
+   * never "0%".
+   */
+  async #addHDRecord({ blob, name, analysis = null, sharpening = null, original = null } = {}) {
     if (this.#mode !== "results") {
       return;
     }
     const file = new File([blob], name, { type: blob.type });
     const record = await this.#store.createRecord(file);
-    // Score ONLY the new copy — directly through the analyzer, WITHOUT the
-    // §9b progress-card path: the detail view is open on the original and a
-    // full pipeline re-render would fight its DOM (the insertBefore race).
-    // Scoring is best-effort: a failure leaves the copy unscored ("—"),
-    // never a fake 0.
-    try {
-      await this.#analyzer.analyzeAll([record], {
-        onResult: (photo, result) => {
-          this.#store.applyAnalysis(photo.id, { score: result.score, band: result.band });
-        },
-        onSkipped: (photo, message) => {
-          this.#store.applySkip(photo.id, message);
-        },
-      });
-    } catch {
-      /* the copy stays unscored — rendered as "—" (§11.2) */
+
+    const rating = hdCopyRating({ sharpening, analysis, original });
+    if (rating) {
+      // The panel already measured this copy (or the snap rule applies) —
+      // reuse it (plan §9: "the record add REUSES the preview analysis").
+      this.#store.applyAnalysis(record.id, { score: rating.score, band: rating.band });
+    } else {
+      try {
+        await this.#analyzer.analyzeAll([record], {
+          onResult: (photo, result) => {
+            this.#store.applyAnalysis(photo.id, { score: result.score, band: result.band });
+          },
+          onSkipped: (photo, message) => {
+            this.#store.applySkip(photo.id, message);
+          },
+        });
+      } catch {
+        /* the copy stays unscored — rendered as "—" (§11.2) */
+      }
     }
+
     this.#enterResults({ animate: false });
     const fresh = this.#store.getById(record.id);
-    const band = fresh?.band ?? "review";
     const score = typeof fresh?.score === "number" ? fresh.score : null;
-    this.#view.announce(
-      `HD copy added to the review: ${formatPercent(score ?? 0)}, ${band}.`,
-    );
+    const band = fresh?.band ?? null;
+    // v0.5.3 honesty (plan §9): real numbers + the band LABEL as displayed
+    // in the sections (never the raw "review" id, never a "0%" fallback); a
+    // copy that could not be scored says exactly that.
+    if (score !== null && band && band !== BAND_SKIPPED) {
+      this.#view.announce(
+        `HD copy added to the review: ${formatPercent(score)}, ${BAND_LABELS[band]}.`,
+      );
+    } else {
+      this.#view.announce("HD copy added to the review, but it could not be scored.");
+    }
   }
 
   /**

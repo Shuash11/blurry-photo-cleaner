@@ -17,6 +17,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { chromium } from "playwright";
+import { parseZip } from "./zip-read.js";
 
 const ROOT = process.cwd();
 const PORT = 9083;
@@ -175,10 +176,16 @@ try {
     page.on("download", (d) => downloads.push(d));
     await page.getByRole("button", { name: "Convert and save" }).click();
     const deadline = Date.now() + 30000;
-    while (downloads.length < 2 && Date.now() < deadline) await page.waitForTimeout(100);
-    check("R5 batch: 2 HD downloads", downloads.length === 2, downloads.map((d) => d.suggestedFilename()).join(", "));
-    check("R5 batch: HD naming on both", downloads.every((d) => /-hd\./.test(d.suggestedFilename())),
+    while (downloads.length < 1 && Date.now() < deadline) await page.waitForTimeout(100);
+    // v0.6.0: the batch saves ONE zip; both copies inside as "-hd.jpg"
+    // (duplicates of the same base name get " (2)"-style suffixes).
+    check("R5 batch: one HD zip download", downloads.length === 1 && downloads[0].suggestedFilename() === "blurry-photo-cleaner-hd-copies.zip",
       downloads.map((d) => d.suggestedFilename()).join(", "));
+    if (downloads.length === 1) {
+      const entries = parseZip(await downloads[0].path());
+      check("R5 batch: HD naming on both", entries.length === 2 && entries.every((e) => /-hd( \(\d+\))?\.jpg$/.test(e.name)),
+        JSON.stringify(entries.map((e) => e.name)));
+    }
     // §11.3.5 done state (the honesty paragraph belongs to idle — asserted
     // above). WAIT for the done state first, then read it.
     await page.waitForSelector("text=2 HD copies saved.", { timeout: 10000 }).catch(() => {});

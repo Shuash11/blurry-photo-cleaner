@@ -21,7 +21,7 @@
  * Selection persists across re-renders (e.g. "Add more" re-analysis).
  */
 
-import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED, MAX_UPSCALE_FACTOR, JPEG_QUALITY, formatPercent, hdOutputSpec, upscaleDimensions, SHARPEN_LEVELS, SHARPEN_DEFAULT, EXPORT_FORMATS, exportName } from "./Thresholds.js";
+import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED, BAND_LABELS, MAX_UPSCALE_FACTOR, JPEG_QUALITY, formatPercent, hdOutputSpec, upscaleDimensions, SHARPEN_LEVELS, SHARPEN_DEFAULT, EXPORT_FORMATS, exportName } from "./Thresholds.js";
 import { triggerAnchorDownload, triggerAnchorBlobDownload, buildHDSliderRow, buildChoiceRow, ExportChooser } from "./ReviewControls.js";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog.js";
 
@@ -29,12 +29,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 /* §9c: bands render in fixed order, matching the user's task (blurry first). */
 const BAND_ORDER = [BAND_BLURRY, BAND_REVIEW, BAND_SHARP];
-const BAND_LABELS = {
-  [BAND_BLURRY]: "Blurry",
-  [BAND_REVIEW]: "Needs review",
-  [BAND_SHARP]: "Sharp",
-  [BAND_SKIPPED]: "Skipped",
-};
+/* Display labels live in Thresholds.js (v0.6.0) — the shared source for the
+   band sections here, App's announcements, and the download ZIP folders. */
+export { BAND_LABELS };
 
 /* §6.2 band reveal: sections fade in and rise 8px (--duration-slow);
    inter-item stagger is the --duration-stagger CSS token, at most six
@@ -47,6 +44,17 @@ const STAGGER_FALLBACK_MS = 50; // == --duration-stagger
 
 const SWIPE_AXIS_MIN_PX = 48;    // minimum travel for a swipe to count
 const SWIPE_DOWN_CLOSE_PX = 80;  // downward travel that closes the sheet
+
+/* v0.5.3 FULL-SIZE FOCUS MODE (plan §10, user request): clicking the stage
+   photo (or Enter/Space on it) expands the stage over the panel chrome
+   (.detail__panel.is-focus, css §4.4 extension) — the top bar stays, the
+   converter panel and bottom bar yield, and the before/after wipe stays
+   mounted and draggable. Esc or a second activation restores the view. */
+const FOCUS_COPY = {
+  enter: "View this photo full size",
+  exit: "Restore the photo view",
+};
+const FOCUS_DRAG_SLACK_PX = 6; // a stage press that traveled farther is a drag/swipe, not a click
 
 /** §11.5 file-size caption (detail view): compact byte formatting, the same
  *  "141 KB" style the v1 tiles used. Module-private — Thresholds owns the
@@ -88,8 +96,12 @@ export class ResultsView {
       getConverter: callbacks.getConverter ?? null,
       announce: callbacks.announce ?? null,
       onRequestDelete: (photo, trigger) => this.requestDelete([photo.id], trigger),
-      // v0.3.0: a downloaded HD copy joins the review (auto-reband).
+      // v0.3.0: a downloaded/kept HD copy joins the review (auto-reband);
+      // v0.5.3: the payload carries the score context (plan §9).
       onAddHD: callbacks.onAddHDRecord ?? null,
+      // v0.5.3 (plan §9): App scores the HD panel's preview blob without
+      // storing it, so the panel can show a source → preview rating.
+      onScorePreview: callbacks.onScorePreview ?? null,
     });
   }
 
@@ -273,10 +285,7 @@ export class ResultsView {
       this.#bandToggles.set(band, toggle);
       this.#refreshBandToggle(band);
       toggle.addEventListener("click", () => {
-        const allSelected = this.#bandAllSelected(band);
-        for (const photo of this.#photos.filter((p) => p.band === band)) {
-          this.#applySelection(photo.id, !allSelected);
-        }
+        this.#setBandSelection(band, !this.#bandAllSelected(band));
       });
       header.appendChild(toggle);
     }
@@ -437,6 +446,32 @@ export class ResultsView {
     if (photo && photo.band !== BAND_SKIPPED) {
       this.#refreshBandToggle(photo.band);
     }
+    this.#onSelectionChange?.();
+  }
+
+  /**
+   * v0.5.3 (plan §9, user decision): the band toggle REPLACES the selection
+   * — "Select all" makes #selectedIds exactly that band's ids (a previous
+   * cross-band selection is cleared, so Download selected can never export
+   * a band the user did not just pick); "Deselect" clears that band's ids.
+   * Per-tile toggles (#applySelection) still add/remove one id at a time,
+   * and selectKeepers still swaps the whole set. The set is swapped in one
+   * step, so one repaint + one selection-change sync covers it (the action
+   * bar's own debounce collapses the announcement as before).
+   */
+  #setBandSelection(band, selected) {
+    if (this.#selectionLocked) {
+      return; // §11.3.4: same lock rule as #applySelection
+    }
+    const bandIds = this.#photos.filter((p) => p.band === band).map((p) => p.id);
+    if (selected) {
+      this.#selectedIds = new Set(bandIds);
+    } else {
+      for (const id of bandIds) {
+        this.#selectedIds.delete(id);
+      }
+    }
+    this.#paintSelection(); // every tile + every toggle re-reads the new set
     this.#onSelectionChange?.();
   }
 
@@ -617,9 +652,16 @@ class PhotoDetailView {
   #wipePos = 50;
   #wipeDragging = false;
   #wipeSweepTimers = [];
+  // v0.5.3 focus mode (plan §10): the pressed-point tracker feeds the stage
+  // click guard — a press that traveled farther than FOCUS_DRAG_SLACK_PX
+  // was a wipe drag or a swipe, never a toggle click.
+  #focusMode = false;
+  #stageDownX = 0;
+  #stageDownY = 0;
+  #stageDragDist = 0;
 
-  constructor({ onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD }) {
-    this.#callbacks = { onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD };
+  constructor({ onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD, onScorePreview }) {
+    this.#callbacks = { onToggleSelect, isSelected, getConverter, announce, onRequestDelete, onAddHD, onScorePreview };
   }
 
   get isOpen() {
@@ -654,6 +696,7 @@ class PhotoDetailView {
       return;
     }
     this.#probeSeq += 1; // orphan any in-flight probe
+    this.#setFocusMode(false); // v0.5.3: the next open starts in the normal view
     this.#hdPanel?.destroy();
     this.#hdPanel = null;
     this.#saveHdBtn = null;
@@ -742,8 +785,12 @@ class PhotoDetailView {
       // v0.3.0: the preview swaps the stage between the original and the
       // converted result (Download/Discard live in the panel).
       onPreview: ({ previewURL }) => this.#showPreviewStage(previewURL),
-      // v0.3.0: a downloaded HD copy joins the review (auto-reband).
-      onAddHD: (blob, name) => this.#callbacks.onAddHD?.(blob, name),
+      // v0.5.3 (plan §9): score the preview blob through App's analyzer
+      // (transient — nothing enters the store; the panel shows the number).
+      onScorePreview: (blob) => this.#callbacks.onScorePreview?.(blob),
+      // v0.3.0: a downloaded/kept HD copy joins the review (auto-reband);
+      // v0.5.3: payload { blob, name, analysis, sharpening, original }.
+      onAddHD: (payload) => this.#callbacks.onAddHD?.(payload),
     });
     // Inline panel, directly above the bottom bar (§11.3.2).
     this.#panel.insertBefore(this.#hdPanel.el, this.#bottomEl);
@@ -991,6 +1038,21 @@ class PhotoDetailView {
     const img = document.createElement("img");
     img.className = "detail__img";
     img.alt = ""; // the filename is announced by the dialog label
+    // v0.5.3 focus mode (plan §10): the photo is the toggle — a real button
+    // role with aria-pressed (the §7 label-change discipline; the
+    // .detail__stage > .detail__img child contract is preserved). The click
+    // guard lives on the STAGE (below) so the same press works over either
+    // wipe layer and never fires after a drag.
+    img.tabIndex = 0;
+    img.setAttribute("role", "button");
+    img.setAttribute("aria-pressed", "false");
+    img.setAttribute("aria-label", FOCUS_COPY.enter);
+    img.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.#setFocusMode(!this.#focusMode);
+      }
+    });
     stage.appendChild(img);
     this.#img = img;
 
@@ -1066,6 +1128,42 @@ class PhotoDetailView {
     stage.addEventListener("pointerup", (event) => this.#onWipePointerUp(event));
     stage.addEventListener("pointercancel", (event) => this.#onWipePointerUp(event));
     wipe.addEventListener("keydown", (event) => this.#onWipeKeydown(event));
+
+    // v0.5.3 focus mode (plan §10): click/tap the photo to toggle the
+    // full-size view. The press tracker is independent of the wipe
+    // handlers (which capture the pointer) — the stage still receives
+    // every pointer event, and a press that traveled farther than
+    // FOCUS_DRAG_SLACK_PX (a wipe drag or a swipe) never toggles. Clicks
+    // on the divider itself stay the wipe's affordance.
+    stage.addEventListener("pointerdown", (event) => {
+      if (!event.isPrimary) {
+        return;
+      }
+      this.#stageDownX = event.clientX;
+      this.#stageDownY = event.clientY;
+      this.#stageDragDist = 0;
+    });
+    stage.addEventListener("pointermove", (event) => {
+      if (!event.isPrimary || !(event.buttons & 1)) {
+        return;
+      }
+      this.#stageDragDist = Math.max(
+        this.#stageDragDist,
+        Math.hypot(event.clientX - this.#stageDownX, event.clientY - this.#stageDownY),
+      );
+    });
+    stage.addEventListener("click", (event) => {
+      if (event.detail === 0) {
+        return; // keyboard-generated click — the img keydown already toggled
+      }
+      if (event.target.closest(".detail__wipe")) {
+        return; // the divider owns its own interaction
+      }
+      if (this.#stageDragDist > FOCUS_DRAG_SLACK_PX) {
+        return; // a wipe drag or a swipe — not a toggle click
+      }
+      this.#setFocusMode(!this.#focusMode);
+    });
 
     panel.appendChild(stageWrap);
 
@@ -1290,6 +1388,23 @@ class PhotoDetailView {
   }
 
   /* ------------------------------------------------------------------
+     v0.5.3 full-size focus mode (plan §10): one class on the panel drives
+     the css §4.4 extension — the stage expands, the converter panel and
+     bottom bar yield; the wipe, chevrons, hint, and top bar stay. The
+     img is the toggle control (role=button + aria-pressed + label swap).
+     ------------------------------------------------------------------ */
+
+  #setFocusMode(on) {
+    if (!this.#panel || this.#focusMode === on) {
+      return;
+    }
+    this.#focusMode = on;
+    this.#panel.classList.toggle("is-focus", on);
+    this.#img.setAttribute("aria-pressed", on ? "true" : "false");
+    this.#img.setAttribute("aria-label", on ? FOCUS_COPY.exit : FOCUS_COPY.enter);
+  }
+
+  /* ------------------------------------------------------------------
      Select toggle (label/check handled with a callback to the grid)
      ------------------------------------------------------------------ */
 
@@ -1297,8 +1412,14 @@ class PhotoDetailView {
     if (event.key === "Escape") {
       event.preventDefault();
       // v0.4.1: layered surfaces — Escape closes the INNERMOST open
-      // surface first: the converter panel when it is open (even if focus
-      // sits on the stage/wipe), then the detail view itself.
+      // surface first. v0.5.3 (plan §10): focus mode is that innermost
+      // layer (the converter panel and bottom bar are hidden while
+      // focused), so Esc restores the normal view first; the converter
+      // panel (visible again) and then the detail view follow as before.
+      if (this.#focusMode) {
+        this.#setFocusMode(false);
+        return;
+      }
       if (this.#hdPanel) {
         this.#closeHDPanel();
         return;
@@ -1312,10 +1433,18 @@ class PhotoDetailView {
     // Focus trap (§12): cycle Tab within the panel while open. The range
     // input of an open converter panel is a focusable control too, so the
     // cycle list includes enabled inputs (native DOM order — no new
-    // machinery, §11.6.2).
+    // machinery, §11.6.2). v0.5.3: the stage photo is itself a toggle
+    // control (role="button", plan §10) and MUST be a cycle member — left
+    // out, the not-in-list fallback routed Tab from the photo back to Done
+    // and the mobile hint chevrons became keyboard-unreachable (phase4 P6).
+    // display:none surfaces (the converter panel and bottom bar while
+    // focus mode is on) are filtered — a hidden control can never hold
+    // focus, and wrapping to one would strand the cycle.
     const focusables = [
-      ...this.#panel.querySelectorAll("button:not([disabled]), input:not([disabled])"),
-    ];
+      ...this.#panel.querySelectorAll(
+        "button:not([disabled]), input:not([disabled]), img[role='button']",
+      ),
+    ].filter((el) => el.getClientRects().length > 0);
     if (focusables.length === 0) {
       return;
     }
@@ -1440,6 +1569,33 @@ function readStaggerMs() {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : STAGGER_FALLBACK_MS;
 }
 
+/**
+ * v0.5.3 HD-copy rating rule (plan §9) — THE one copy-rating policy, shared
+ * by the HD panel's projected readout (HDPanelView) and App's record add:
+ *   - sharpening Off + a completed preview analysis + a scored original →
+ *     the copy is a pure enlargement (content unchanged; resampling can
+ *     only soften), so the copy KEEPS the original's measured rating
+ *     exactly (the snap that fixes the already-clear mis-banding).
+ *   - otherwise → the measured preview analysis (sharpening can genuinely
+ *     re-band a copy; an unscored analysis stays null — never a fake score).
+ * Returns { score, band } or null. `original` is the source record (the
+ * panel and App both hold it; it may be null on defensive paths).
+ * Exported from this module because App already imports ResultsView and a
+ * Thresholds add is outside the v0.5.3 write scope — no import cycle.
+ */
+export function hdCopyRating({ sharpening, analysis, original }) {
+  const level = SHARPEN_LEVELS.find((l) => l.id === sharpening);
+  const sharpeningOff = level ? level.amount === 0 : false;
+  const originalScored =
+    !!original &&
+    typeof original.score === "number" &&
+    (original.band === BAND_BLURRY || original.band === BAND_REVIEW || original.band === BAND_SHARP);
+  if (sharpeningOff && analysis && originalScored) {
+    return { score: original.score, band: original.band };
+  }
+  return analysis ?? null;
+}
+
 /* ======================================================================
    HDPanelView — the §11.3.2 inline converter panel of the detail view:
    "Save an HD copy" with the 1×–4× slider, the live old→new readout
@@ -1455,7 +1611,7 @@ const HD_PANEL_COPY = {
   applyBusy: "Upscaling…",
   helper: "Pick a larger size to save a copy.",
   honesty: "Upscaled — enlarged, same captured detail.",
-  scope: "Drag the divider to compare before and after — nothing is saved until you choose. The improved copy can join your review without downloading.",
+  scope: "Drag the divider to compare before and after — nothing is saved until you choose. The converted copy can join your review without downloading.",
   clampNote: (max) => `This browser supports up to ${max}× for this photo.`,
   previewBadge: "HD preview — drag the divider",
   downloadPreview: "Download HD copy",
@@ -1467,7 +1623,12 @@ const HD_PANEL_COPY = {
   retry: "Try again",
   announcePreview: (width, height) => `HD preview ready — ${width} × ${height}. Drag the divider to compare, then keep, download, or discard.`,
   announceDownloaded: (name) => `${name} saved and added to the review.`,
-  announceKept: "Improved copy kept in the review.",
+  announceKept: "HD copy kept in the review.",
+  // v0.5.3 (plan §9) sharpness-readout line: pending while App's analyzer
+  // measures the preview blob, then the real projected rating (or an
+  // honest could-not-score line — never a fabricated number).
+  measuring: "Measuring sharpness…",
+  couldNotScore: "HD preview: could not be scored",
 };
 
 const FACTOR_LABEL = (factor) => `${factor}×`;
@@ -1480,8 +1641,14 @@ class HDPanelView {
   #onAnnounce;
   #onClose;
   #onPreview; // v0.3.0: swap the detail stage to the converted result
-  #onAddHD; // v0.3.0: a downloaded HD copy joins the review (auto-reband)
+  #onScorePreview; // v0.5.3: App-owned analyzer scores the preview blob (no store write)
+  #onAddHD; // v0.3.0: a downloaded/kept HD copy joins the review (auto-reband)
   #sharpen = SHARPEN_DEFAULT;
+  // v0.5.3 (Lead review fix): the sharpening level the CURRENT preview blob
+  // was actually built with — set at "Create preview" time. The live radio
+  // (#sharpen) may change afterwards; the rating rule and the projected
+  // readout must describe the BLOB, never the radio's post-hoc state.
+  #appliedSharpenId = SHARPEN_DEFAULT;
   #format = "jpeg";
   #formatEl = null;
   #previewActions = null;
@@ -1489,6 +1656,15 @@ class HDPanelView {
   #previewBlob = null;
   #previewName = null;
   #previewApplied = false; // one-shot: Keep/Download apply exactly once per preview
+  // v0.5.3 (plan §9): the sharpness readout + the score gate on the
+  // preview's Keep/Download controls. The source line is static (record
+  // data) — only the preview line needs a live reference.
+  #previewLine = null; // "Measuring sharpness…" → "HD preview: …"
+  #keepBtn = null;
+  #keepDownloadBtn = null;
+  #previewAnalysis = null; // { score, band } of the current preview; null until scored/failed
+  #previewPending = false; // true while the preview score round-trip is in flight
+  #previewSeq = 0; // orphans an in-flight score on re-apply/discard/close
 
   #el = null;
   #slider = null;
@@ -1506,7 +1682,7 @@ class HDPanelView {
   #busy = false;
   #destroyed = false;
 
-  constructor({ photo, maxFactor, converter, onParkFocus, onAnnounce, onClose, onPreview, onAddHD }) {
+  constructor({ photo, maxFactor, converter, onParkFocus, onAnnounce, onClose, onPreview, onScorePreview, onAddHD }) {
     this.#photo = photo;
     this.#maxFactor = maxFactor;
     this.#converter = converter;
@@ -1514,6 +1690,7 @@ class HDPanelView {
     this.#onAnnounce = onAnnounce ?? null;
     this.#onClose = onClose ?? null;
     this.#onPreview = onPreview ?? null;
+    this.#onScorePreview = onScorePreview ?? null;
     this.#onAddHD = onAddHD ?? null;
     this.#build();
     // §11.4 initial render: the current target appears WITHOUT animation —
@@ -1582,6 +1759,12 @@ class HDPanelView {
 
     // Readout row: "Original W × H" static · "Output [animated] W′ × H′".
     el.appendChild(this.#buildReadout());
+
+    // v0.5.3 (plan §9): honest sharpness readout, right under the resolution
+    // readout — the source's measured rating (record data, always available)
+    // and, once "Create preview" scores the blob, the rating the copy will
+    // get. Existing .hd-copy styling only.
+    el.appendChild(this.#buildSharpnessReadout());
 
     // Slider row (shared native-range control with the batch dialog).
     const sliderRow = buildHDSliderRow({
@@ -1677,8 +1860,9 @@ class HDPanelView {
     this.#statusEl = status;
 
     // v0.4.1 preview action row (user request): Keep in review works with
-    // NO download — the improved copy is scored and joins the review; the
-    // download stays available as an option; Discard throws it away.
+    // NO download — the copy is rated (shared hdCopyRating rule) and joins
+    // the review; the download stays available as an option; Discard throws
+    // it away.
     const previewActions = document.createElement("div");
     previewActions.className = "hd-preview__actions";
     previewActions.hidden = true;
@@ -1700,6 +1884,10 @@ class HDPanelView {
     previewActions.append(keepPreview, downloadPreview, discardPreview);
     el.appendChild(previewActions);
     this.#previewActions = previewActions;
+    // v0.5.3: Keep/Download wait for the preview score (disabled while the
+    // "Measuring sharpness…" round-trip runs); Discard stays available.
+    this.#keepBtn = keepPreview;
+    this.#keepDownloadBtn = downloadPreview;
 
     // Scope caption.
     const scope = document.createElement("p");
@@ -1739,6 +1927,50 @@ class HDPanelView {
     this.#outWindow = windowEl;
     this.#outSizer = sizer;
     return row;
+  }
+
+  /**
+   * v0.5.3 (plan §9): the sharpness-readout block. The source line renders
+   * immediately from the record; the preview line stays hidden until
+   * "Create preview" has scored the blob (pending text → the projected
+   * rating via the shared hdCopyRating rule, so the panel number and the
+   * kept copy's tile can never disagree). A Sharp source also carries the
+   * "Already sharp" framing — enlarging adds no new captured detail, and
+   * with sharpening Off the copy keeps this exact rating.
+   */
+  #buildSharpnessReadout() {
+    const fragment = document.createDocumentFragment();
+
+    const source = document.createElement("p");
+    source.className = "hd-copy";
+    source.textContent = this.#sourceRatingText();
+    fragment.appendChild(source);
+
+    const preview = document.createElement("p");
+    preview.className = "hd-copy";
+    preview.hidden = true;
+    this.#previewLine = preview;
+    fragment.appendChild(preview);
+
+    const photo = this.#photo;
+    if (photo.band === BAND_SHARP && typeof photo.score === "number") {
+      const note = document.createElement("p");
+      note.className = "hd-copy";
+      note.textContent = `Already sharp — ${photo.score}%. Enlarging keeps the same captured detail — it won't add sharpness.`;
+      fragment.appendChild(note);
+    }
+
+    return fragment;
+  }
+
+  /** The source's rating from its store record — the same "NN% sharp · Band"
+   *  form the preview line uses; an unscored source renders the §11.2 "—". */
+  #sourceRatingText() {
+    const photo = this.#photo;
+    if (typeof photo.score === "number" && photo.band && photo.band !== BAND_SKIPPED) {
+      return `Source: ${formatPercent(photo.score)} · ${BAND_LABELS[photo.band]}`;
+    }
+    return "Source: —";
   }
 
   /* ------------------------------------------------------------------
@@ -1790,6 +2022,7 @@ class HDPanelView {
     const photo = this.#photo;
     const factor = this.#factor;
     const sharpenLevel = SHARPEN_LEVELS.find((l) => l.id === this.#sharpen) ?? SHARPEN_LEVELS[0];
+    this.#appliedSharpenId = sharpenLevel.id; // the blob is built with THIS level
     this.#busy = true;
     this.#setControlsDisabled(true);
     this.#applyLabel.textContent = HD_PANEL_COPY.applyBusy;
@@ -1817,11 +2050,15 @@ class HDPanelView {
       this.#previewApplied = false; // a fresh preview re-arms Keep/Download
       this.#onPreview?.({ previewURL: this.#previewURL });
       this.#previewActions.hidden = false;
+      // v0.5.3 (plan §9): score the preview blob and show the real number
+      // before the user can keep/download it (the numbers rule).
+      this.#beginPreviewScoring(result.blob);
       this.#setStatus({ text: HD_PANEL_COPY.previewBadge });
       // §11.6.4: one polite announcement, once, on preview ready.
       this.#onAnnounce?.(HD_PANEL_COPY.announcePreview(result.width, result.height));
     } catch {
       if (!this.#destroyed) {
+        this.#resetPreviewRating(); // no fresh preview exists — no stale line
         this.#setStatus({ text: HD_PANEL_COPY.failed, retry: true });
       }
     } finally {
@@ -1835,15 +2072,92 @@ class HDPanelView {
     }
   }
 
+  /**
+   * v0.5.3 (plan §9): score the fresh preview through App's analyzer and
+   * show the real number. Keep/Download wait for it (the rating rule needs
+   * the measurement); Discard stays available. The sequence guard orphans a
+   * stale result when the user re-applies, discards, or closes mid-flight.
+   */
+  async #beginPreviewScoring(blob) {
+    const seq = ++this.#previewSeq;
+    this.#previewAnalysis = null;
+    this.#setRatingPending(true);
+    let analysis = null;
+    try {
+      analysis = (await this.#onScorePreview?.(blob)) ?? null;
+    } catch {
+      analysis = null; // honest fallback — the panel never fabricates a number
+    }
+    if (this.#destroyed || seq !== this.#previewSeq) {
+      return; // superseded by a newer preview / discard / close
+    }
+    this.#previewAnalysis = analysis;
+    this.#setRatingPending(false);
+    this.#renderPreviewRating();
+  }
+
+  /** Pending gate: "Measuring sharpness…" while Keep/Download are disabled. */
+  #setRatingPending(pending) {
+    this.#previewPending = pending;
+    if (this.#previewLine) {
+      this.#previewLine.hidden = false;
+      this.#previewLine.textContent = pending ? HD_PANEL_COPY.measuring : "";
+    }
+    if (this.#keepBtn) {
+      this.#keepBtn.disabled = pending;
+    }
+    if (this.#keepDownloadBtn) {
+      this.#keepDownloadBtn.disabled = pending;
+    }
+  }
+
+  /** The projected rating via the shared rule (panel ⇄ App can't drift). */
+  #renderPreviewRating() {
+    if (!this.#previewLine) {
+      return;
+    }
+    const rating = hdCopyRating({
+      sharpening: this.#appliedSharpenId,
+      analysis: this.#previewAnalysis,
+      original: this.#photo,
+    });
+    this.#previewLine.hidden = false;
+    this.#previewLine.textContent = rating
+      ? `HD preview: ${formatPercent(rating.score)} · ${BAND_LABELS[rating.band]}`
+      : HD_PANEL_COPY.couldNotScore;
+  }
+
+  /** Drop the preview rating line (failed apply / discard / teardown path). */
+  #resetPreviewRating() {
+    this.#previewAnalysis = null;
+    if (this.#previewLine) {
+      this.#previewLine.hidden = true;
+      this.#previewLine.textContent = "";
+    }
+  }
+
+  /** v0.5.3: Keep/Download hand App the full story — the blob, the panel's
+   *  sharpening choice, the measured analysis, and the source record (the
+   *  shared rating rule's inputs). */
+  #notifyAddHD() {
+    this.#onAddHD?.({
+      blob: this.#previewBlob,
+      name: this.#previewName,
+      analysis: this.#previewAnalysis,
+      sharpening: this.#appliedSharpenId,
+      original: this.#photo,
+    });
+  }
+
   /** v0.3.0: save the previewed copy — and it joins the review with its
-   *  own fresh score (the auto-reband flow lives in App.addHDToReview). */
+   *  own rating (the auto-reband flow lives in App.#addHDRecord). */
   #downloadPreview() {
-    if (this.#previewApplied || !this.#previewBlob || !this.#previewName) {
+    if (this.#previewApplied || this.#previewPending || !this.#previewBlob || !this.#previewName) {
       return;
     }
     this.#previewApplied = true;
     triggerAnchorBlobDownload(this.#previewBlob, this.#previewName);
-    this.#onAddHD?.(this.#previewBlob, this.#previewName);
+    this.#notifyAddHD();
     this.#onAnnounce?.(HD_PANEL_COPY.announceDownloaded(this.#previewName));
     this.#setStatus({ text: HD_PANEL_COPY.done(this.#previewName) });
     this.#previewActions.hidden = true;
@@ -1854,14 +2168,14 @@ class HDPanelView {
   /**
    * v0.4.1 (user request: "you don't need to download in order to see the
    * animation slider"): apply the previewed copy to the REVIEW with no
-   * download at all — it is scored fresh and joins the band it earns.
+   * download at all — it joins the band its rating earns.
    */
   #keepPreview() {
-    if (this.#previewApplied || !this.#previewBlob || !this.#previewName) {
+    if (this.#previewApplied || this.#previewPending || !this.#previewBlob || !this.#previewName) {
       return;
     }
     this.#previewApplied = true;
-    this.#onAddHD?.(this.#previewBlob, this.#previewName);
+    this.#notifyAddHD();
     this.#onAnnounce?.(HD_PANEL_COPY.announceKept);
     this.#setStatus({ text: HD_PANEL_COPY.doneKeep });
     this.#previewActions.hidden = true;
@@ -1869,12 +2183,14 @@ class HDPanelView {
 
   /** v0.3.0: throw the preview away — restore the original on the stage. */
   #discardPreview() {
+    this.#previewSeq += 1; // orphan any in-flight score for the discarded preview
     if (this.#previewURL) {
       URL.revokeObjectURL(this.#previewURL);
       this.#previewURL = null;
     }
     this.#previewBlob = null;
     this.#previewName = null;
+    this.#resetPreviewRating();
     this.#onPreview?.({ previewURL: null }); // restore the original stage
     this.#previewActions.hidden = true;
     this.#setStatus(null);

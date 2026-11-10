@@ -13,8 +13,10 @@
  */
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { chromium } from "playwright";
+import { parseZip } from "./zip-read.js";
 
 const ROOT = process.cwd();
 const PORT = 9107;
@@ -67,15 +69,36 @@ try {
     const pressed = await page.evaluate(() => window.__debugState().photos.map((p) => ({ b: p.band })));
     check("keepers: store sanity (4 banded photos)", before === 4, JSON.stringify(pressed));
 
-    // Download the keepers → chooser → Original → 2 byte-identical saves.
+    // Download the keepers → chooser → Original → v0.6.0: ONE organized zip
+    // with both sharp photos under "Sharp/" (byte-identical entries).
     const downloads = [];
-    page.on("download", (d) => downloads.push(d.suggestedFilename()));
+    page.on("download", (d) => downloads.push(d));
     await page.getByRole("button", { name: "Download selected" }).click();
     await page.waitForSelector(".confirm__panel", { timeout: 5000 });
     await page.getByRole("button", { name: /^Original/ }).click();
     const deadline = Date.now() + 15000;
-    while (downloads.length < 2 && Date.now() < deadline) await page.waitForTimeout(100);
-    check("keepers: 2 original downloads", downloads.length === 2, JSON.stringify(downloads));
+    while (downloads.length < 1 && Date.now() < deadline) await page.waitForTimeout(100);
+    check(
+      "keepers: one bundled zip download",
+      downloads.length === 1 && downloads[0].suggestedFilename() === "blurry-photo-cleaner-photos.zip",
+      JSON.stringify(downloads.map((d) => d.suggestedFilename())),
+    );
+    if (downloads.length === 1) {
+      const entries = parseZip(await downloads[0].path());
+      const expectedPairs = [
+        ["Sharp/fixture-sharp-checkerboard.png", "fixture-sharp-checkerboard.png"],
+        ["Sharp/fixture-sharp-text.png", "fixture-sharp-text.png"],
+      ];
+      check(
+        "keepers: 2 original downloads inside the zip (band folder, byte-identical)",
+        entries.length === 2
+          && expectedPairs.every(([entryName, fixName]) => {
+            const entry = entries.find((e) => e.name === entryName);
+            return entry && entry.data.equals(readFileSync(FIX(fixName)));
+          }),
+        JSON.stringify(entries.map((e) => e.name)),
+      );
+    }
     check("keepers: zero console errors", issues.length === 0, issues.join("|"));
     await page.close();
   }
@@ -172,24 +195,54 @@ try {
     await page.setInputFiles("#file-input", batch);
     await page.waitForSelector(".results", { timeout: 30000 });
     await page.waitForFunction(() => window.__debugState().analysis.phase === "idle", null, { timeout: 30000 });
-    // Select all 25: sharp band + blurry band toggles (25 photos include
-    // duplicate fixture names — the band toggles are the unambiguous path).
+    // Select all 25. v0.5.3 (plan §9): band select-all now REPLACES the
+    // selection, so the old "sharp toggle + blurry toggle" pair no longer
+    // accumulates across bands (the blurry toggle would clear sharp). One
+    // band toggle + per-tile clicks (per-tile toggles still add) selects
+    // every photo under replace semantics.
     await page.locator(".band--sharp .band__toggle").click();
-    await page.locator(".band--blurry .band__toggle").click();
+    const blurryTiles = page.locator(".band--blurry .tile__photo");
+    const blurryTileCount = await blurryTiles.count();
+    for (let i = 0; i < blurryTileCount; i += 1) {
+      await blurryTiles.nth(i).click();
+    }
+    const poolSelection = (await page.locator(".action-bar__summary").textContent()).trim();
+    check("pool: all 25 photos selected before batch convert", poolSelection.includes("25 selected"), poolSelection);
     await page.getByRole("button", { name: "Save HD copies" }).click();
     await page.waitForSelector(".hd-dialog__panel", { timeout: 5000 });
     const slider = page.locator(".hd-dialog .hd-slider__input");
     await slider.focus();
     await page.keyboard.press("ArrowRight"); // 1.5× — small enough to be fast ×25
     const downloads = [];
-    page.on("download", (d) => downloads.push(d.suggestedFilename()));
+    page.on("download", (d) => downloads.push(d));
     const t0 = Date.now();
     await page.getByRole("button", { name: "Convert and save" }).click();
+    // v0.6.0: desktop saves the copies as ONE zip — wait for it, then
+    // verify it carries all 25 copies (flat names, duplicates suffixed).
     const deadline = t0 + 120000;
-    while (downloads.length < 25 && Date.now() < deadline) await page.waitForTimeout(200);
+    while (downloads.length < 1 && Date.now() < deadline) await page.waitForTimeout(200);
     const elapsed = Date.now() - t0;
-    check("pool: all 25 HD copies downloaded", downloads.length === 25, `${downloads.length} in ${elapsed}ms`);
+    check(
+      "pool: all 25 HD copies saved in one zip",
+      downloads.length === 1 && downloads[0].suggestedFilename() === "blurry-photo-cleaner-hd-copies.zip",
+      `${downloads.length} download(s) in ${elapsed}ms: ${JSON.stringify(downloads.map((d) => d.suggestedFilename()))}`,
+    );
     check("pool: parallel batch completed in a bounded window (<60s)", elapsed < 60000, `${elapsed}ms`);
+    if (downloads.length === 1) {
+      const entries = parseZip(await downloads[0].path());
+      // v0.6.0 dedupe: duplicate fixture names get " (2)", " (3)"… suffixes
+      // (before the extension), so 25 copies = 25 UNIQUE entry names, all
+      // HD JPEGs ("-hd.jpg" for the first of each base name, "-hd (n).jpg"
+      // for repeats).
+      const hdPattern = /-hd( \(\d+\))?\.jpg$/;
+      const hdEntries = entries.filter((e) => hdPattern.test(e.name));
+      const uniqueNames = new Set(entries.map((e) => e.name));
+      check(
+        "pool: the zip carries all 25 HD copies (duplicates suffixed, names unique)",
+        entries.length === 25 && hdEntries.length === 25 && uniqueNames.size === 25,
+        `${entries.length} entries, ${hdEntries.length} HD jpgs, ${uniqueNames.size} unique`,
+      );
+    }
     // UI responsiveness mid-batch was implicitly proven (the waits polled);
     // assert the done state arrived.
     await page.waitForSelector("text=25 HD copies saved.", { timeout: 20000 }).catch(() => {});

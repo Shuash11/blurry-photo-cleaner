@@ -24,16 +24,18 @@
  *       per-band count text == rendered tiles == store band population; empty
  *       band shows "No photos in this band" and no select-all toggle; no
  *       skipped section when no skipped photos.
- *   P3  Score chips (F1/F2; R4 re-scope 2026-11-06 — design-spec-v2 §11.2):
+ *   P3  Score chips (F1/F2; v0.5.3 palette sync — design-spec-v3 §2):
  *       every scored tile's chip reads "NN% sharp", identity-mapped from its
  *       store score, and its computed color equals the --color-band-*-text
- *       token (#FF6B6E / #FFB25C / #5BD97E); band chip headings use the same
+ *       token (#FF9595 / #FFC46B / #52D273); band chip headings use the same
  *       tokens.
  *   P4  Selection: single-tile toggle (aria-pressed + ring + check badge),
- *       band Select all / Deselect, action-bar summary "N selected · M total"
- *       sync; selection survives detail open/close AND a results re-render
- *       ("Add more" → re-analysis).
- *   P5  Download selected (0 selected disabled): select 2 → 2 download events,
+ *       band Select all (v0.5.3 plan §9: REPLACES the selection with that
+ *       band's ids — never accumulates across bands) / Deselect, action-bar
+ *       summary "N selected · M total" sync; selection survives detail
+ *       open/close AND a results re-render ("Add more" → re-analysis).
+ *   P5  Download selected (0 selected disabled): select 2 → ONE organized
+ *       zip (v0.6.0: band folders, byte-identical entries),
  *       correct original filenames in store order, byte-identical content;
  *       busy state ("Preparing…", spinner, Add more disabled) + polite live
  *       announcements "Preparing 2 photos" / "Saved 2 photos".
@@ -92,12 +94,16 @@ const WATCHDOG_MS = 540000;      // whole-run hard cap
 const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
 const MOBILE_VIEWPORT = { width: 375, height: 812 };
 
-/* Phase 4 fix F1/F2 tokens (§3.3): band text on tints / the grouped
-   background. These are the exact values the chips must compute to. */
+/* Phase 4 fix F1/F2 tokens: band text on tints / the grouped background.
+   v0.5.3 sync: the v3 restyle changed the --color-band-*-text tokens and
+   these constants were still the v2-era values (the same stale-constant
+   class the plan §2/§3 WP3 sync fixed in v2-r3) — updated to the binding
+   design-spec-v3 §2 values. These are the exact values the chips must
+   compute to. */
 const BAND_TOKENS = {
-  blurry: { hex: "#FF6B6E", css: "rgb(255, 107, 110)", rgb: [255, 107, 110] },
-  review: { hex: "#FFB25C", css: "rgb(255, 178, 92)", rgb: [255, 178, 92] },
-  sharp: { hex: "#5BD97E", css: "rgb(91, 217, 126)", rgb: [91, 217, 126] },
+  blurry: { hex: "#FF9595", css: "rgb(255, 149, 149)", rgb: [255, 149, 149] },
+  review: { hex: "#FFC46B", css: "rgb(255, 196, 107)", rgb: [255, 196, 107] },
+  sharp: { hex: "#52D273", css: "rgb(82, 210, 115)", rgb: [82, 210, 115] },
 };
 const BAND_LABELS = { blurry: "Blurry", review: "Needs review", sharp: "Sharp" };
 const GROUPED_BG = [20, 21, 23]; // #141517 — §3.1 grouped background (delegated contrast target)
@@ -836,13 +842,32 @@ async function stateP4({ page }) {
   const deselectToggle = band(page, "sharp").getByRole("button", { name: "Deselect", exact: true });
   assert(await deselectToggle.isVisible(), "band toggle did not flip to Deselect when the band was fully selected");
 
-  // Blurry band select-all adds; Deselect removes. R6 re-scope: the blurry
-  // toggle reads "Select all recommended (N)" (§11.5.5).
+  // v0.5.3 REPLACE semantics (plan §9, user-approved test re-scope): the
+  // Blurry band select-all now makes the selection EXACTLY that band's ids
+  // — the sharp ids selected above are cleared, never accumulated across
+  // bands. R6 re-scope: the blurry toggle reads
+  // "Select all recommended (N)" (§11.5.5).
   await band(page, "blurry").getByRole("button", { name: /Select all recommended \(\d+\)/ }).click();
-  assert((await summary()) === "4 selected · 4 total", `summary after blurry Select all "${await summary()}"`);
+  assert((await summary()) === "2 selected · 4 total", `summary after blurry Select all "${await summary()}"`);
+  for (const n of [FIX.blurredCheckerboard.name, FIX.blurredText.name]) {
+    const blurryBtn = tileOf(n).locator(".tile__photo");
+    t = {
+      pressed: await blurryBtn.getAttribute("aria-pressed"),
+      checkVisible: await tileOf(n).locator(".tile__check").isVisible(),
+    };
+    assert(t.pressed === "true" && t.checkVisible, `blurry select-all missed "${n}"`);
+  }
+  for (const n of [FIX.sharpCheckerboard.name, FIX.sharpText.name]) {
+    t = await readTile(n);
+    assert(t.pressed === "false" && !t.checkVisible, `blurry select-all left sharp tile "${n}" selected (replace semantics)`);
+  }
   await band(page, "blurry").getByRole("button", { name: "Deselect", exact: true }).click();
-  assert((await summary()) === "2 selected · 4 total", `summary after blurry Deselect "${await summary()}"`);
-  await deselectToggle.click();
+  assert((await summary()) === "0 selected · 4 total", `summary after blurry Deselect "${await summary()}"`);
+
+  // The Sharp band's own Deselect still clears its ids (re-select → Deselect).
+  await band(page, "sharp").getByRole("button", { name: "Select all", exact: true }).click();
+  assert((await summary()) === "2 selected · 4 total", `summary after sharp re-select "${await summary()}"`);
+  await band(page, "sharp").getByRole("button", { name: "Deselect", exact: true }).click();
   assert((await summary()) === "0 selected · 4 total", `summary after sharp Deselect "${await summary()}"`);
 
   // Select exactly one tile for the survival tests.
@@ -870,7 +895,7 @@ async function stateP4({ page }) {
   assert((await summary()) === "1 selected · 5 total", `summary after re-render "${await summary()}"`);
   await shot(page, "04b-selection-survives-rerender.png");
 
-  return `single toggle aria-pressed+ring+check; band Select all/Deselect syncs; summary 0→1→2→4→0→1; selection survived detail open/close and a 5-photo re-render ("1 selected · 5 total")`;
+  return `single toggle aria-pressed+ring+check; band Select all REPLACES (sharp=2 → blurry select-all clears sharp, =2) and Deselect clears; summary 0→1→0→2→2→0→2→0→1; selection survived detail open/close and a 5-photo re-render ("1 selected · 5 total")`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -890,70 +915,54 @@ async function stateP5({ page }) {
   assert(await downloadBtn().isDisabled(), "Download selected is enabled at 0 selected");
   assert((await summary()) === "0 selected · 4 total", `summary at zero "${await summary()}"`);
 
-  // Select exactly 2 (one sharp, one blurry); store order decides download order.
+  // Select exactly 2 (one sharp, one blurry).
   await page.getByRole("button", { name: FIX.sharpText.name, exact: true }).click();
   // R6 re-scope: the blurry tile's accessible name carries the §11.5.5
   // recommendation fact — match either name form.
+  const blurredName = FIX.blurredCheckerboard.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   await page
-    .getByRole("button", { name: new RegExp(`^${FIX.blurredCheckerboard.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(, suggested for deletion)?$`) })
+    .getByRole("button", { name: new RegExp("^" + blurredName + "(, suggested for deletion)?$") })
     .click();
   assert((await summary()) === "2 selected · 4 total", `summary at 2 selected "${await summary()}"`);
   assert(!(await downloadBtn().isDisabled()), "Download selected disabled with 2 selected");
 
+  /* Part 1 — desktop (v0.6.0): the multi-select download arrives as ONE
+     organized zip with the review's band folders inside; every entry is
+     byte-identical to its original. The busy window for 2 small photos is
+     a few ms, so the transient busy state is asserted deterministically on
+     the touch-emulated page in part 2. */
   const downloads = [];
-  page.on("download", (d) => downloads.push({ name: d.suggestedFilename(), download: d, at: Date.now() }));
+  page.on("download", (d) => downloads.push({ name: d.suggestedFilename(), download: d }));
 
   await downloadBtn().click();
   // v0.3.0 re-scope: Download selected opens the export chooser — pick
-  // Original (the byte-identical v0.1 behavior), then the busy state runs.
+  // Original (the byte-identical v0.1 behavior).
   await page.getByRole("button", { name: /^Original/ }).click();
 
-  // Busy state: label "Preparing…", disabled, spinner, Add more disabled, live region.
-  await page.waitForFunction(
-    () => {
-      const btn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith("Preparing"));
-      return !!btn && btn.disabled;
-    },
-    null,
-    { timeout: STEP_TIMEOUT, polling: 20 },
-  );
-  const spinnerVisible = await page.locator(".action-bar .spinner").isVisible();
-  const addMoreDisabled = await page.getByRole("button", { name: "Add more", exact: true }).isDisabled();
-  const liveBusy = (await page.locator("#live-region").textContent()).trim();
-  assert(spinnerVisible, "spinner not visible during the download busy state");
-  assert(addMoreDisabled, '"Add more" not disabled during downloads');
-  assert(liveBusy === "Preparing 2 photos", `live region during busy "${liveBusy}", expected "Preparing 2 photos"`);
-  await shot(page, "05a-download-busy.png");
-
-  // Both downloads, sequentially, from the original files.
   const deadline = Date.now() + STEP_TIMEOUT;
-  while (downloads.length < 2 && Date.now() < deadline) await sleep(50);
+  while (downloads.length < 1 && Date.now() < deadline) await sleep(50);
   assert(
-    downloads.length === 2,
-    `expected 2 download events, saw ${downloads.length} (${JSON.stringify(downloads.map((d) => d.name))})`,
+    downloads.length === 1 && downloads[0].name === "blurry-photo-cleaner-photos.zip",
+    `expected 1 zip download, saw ${downloads.length} (${JSON.stringify(downloads.map((d) => d.name))})`,
   );
-  // The app downloads in store order (decode-completion order) — derive it.
-  const storeOrder = (await debugState(page)).photos
-    .filter((p) => p.name === FIX.sharpText.name || p.name === FIX.blurredCheckerboard.name)
-    .map((p) => p.name);
-  assert(
-    downloads.length === 2 && downloads[0].name === storeOrder[0] && downloads[1].name === storeOrder[1],
-    `download names/order ${JSON.stringify(downloads.map((d) => d.name))}, expected store order ${JSON.stringify(storeOrder)}`,
-  );
-  const expectedBuffers = new Map([
-    [FIX.sharpText.name, FIX.sharpText.buffer],
-    [FIX.blurredCheckerboard.name, FIX.blurredCheckerboard.buffer],
+  const { parseZip } = require("./zip-read.js");
+  const entries = parseZip(await downloads[0].download.path());
+  const expected = new Map([
+    [`Sharp/${FIX.sharpText.name}`, FIX.sharpText.buffer],
+    [`Blurry/${FIX.blurredCheckerboard.name}`, FIX.blurredCheckerboard.buffer],
   ]);
-  for (const d of downloads) {
-    const expectedBuffer = expectedBuffers.get(d.name);
-    const savedPath = await d.download.path();
-    const saved = fs.readFileSync(savedPath);
+  assert(
+    entries.length === 2 && entries.every((e) => expected.has(e.name)),
+    `zip entries ${JSON.stringify(entries.map((e) => e.name))}, expected ${JSON.stringify([...expected.keys()])}`,
+  );
+  for (const entry of entries) {
+    const expectedBuffer = expected.get(entry.name);
     assert(
-      saved.length === expectedBuffer.length && saved.equals(expectedBuffer),
-      `saved "${d.name}" (${saved.length} B) differs from the original file (${expectedBuffer.length} B)`,
+      entry.data.length === expectedBuffer.length && entry.data.equals(expectedBuffer),
+      `zip entry "${entry.name}" (${entry.data.length} B) differs from the original file (${expectedBuffer.length} B)`,
     );
   }
-  note(`download events: ${downloads.map((d) => d.name).join(" → ")}; Δt=${downloads[1].at - downloads[0].at}ms (sequential loop)`);
+  note(`bundled download: ${entries.map((e) => e.name).join(" + ")} (byte-identical, one zip)`);
 
   // Completion state: label restored, spinner hidden, Add more enabled, live region.
   await page.waitForFunction(
@@ -970,8 +979,99 @@ async function stateP5({ page }) {
   assert(!(await page.getByRole("button", { name: "Add more", exact: true }).isDisabled()), '"Add more" still disabled after downloads');
   await shot(page, "05b-after-download.png");
 
-  return `0 selected disabled; 2 selected → "${downloads[0].name}" + "${downloads[1].name}" (byte-identical, ${downloads[1].at - downloads[0].at}ms apart); busy "Preparing…"+spinner+Add more disabled+live "Preparing 2 photos"; done → live "Saved 2 photos"`;
+  /* Part 2 — touch-emulated (v0.6.0): individual downloads keep the
+     deterministic busy state (2 × 350ms pacing) and the original
+     two-download behavior. matchMedia is stubbed BEFORE any app script
+     runs, so the §7.3 touch check takes the individual path. */
+  const touchPage = await page.context().newPage();
+  await touchPage.addInitScript(() => {
+    const original = window.matchMedia.bind(window);
+    window.matchMedia = (query) => {
+      if (query === "(hover: none), (pointer: coarse)") {
+        return {
+          matches: true,
+          media: query,
+          onchange: null,
+          addListener() {},
+          removeListener() {},
+          addEventListener() {},
+          removeEventListener() {},
+          dispatchEvent() { return false; },
+        };
+      }
+      return original(query);
+    };
+  });
+  const touchIssues = [];
+  touchPage.on("pageerror", (e) => touchIssues.push(e.message));
+  await touchPage.goto(page.url(), { waitUntil: "load", timeout: STEP_TIMEOUT });
+  await chooseFiles(touchPage, "Choose photos", ALL_FOUR.map((f) => asInput(f)));
+  await waitForResolved(touchPage, 4);
+  await waitForResults(touchPage);
+  await touchPage.getByRole("button", { name: FIX.sharpText.name, exact: true }).click();
+  await touchPage
+    .getByRole("button", { name: new RegExp("^" + blurredName + "(, suggested for deletion)?$") })
+    .click();
+
+  const touchDownloads = [];
+  touchPage.on("download", (d) => touchDownloads.push({ name: d.suggestedFilename(), download: d }));
+  await touchPage.getByRole("button", { name: "Download selected", exact: true }).click();
+  await touchPage.getByRole("button", { name: /^Original/ }).click();
+
+  // Deterministic busy state: 2 photos × 350ms pacing ≥ 700ms.
+  await touchPage.waitForFunction(
+    () => {
+      const btn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith("Preparing"));
+      return !!btn && btn.disabled;
+    },
+    null,
+    { timeout: STEP_TIMEOUT, polling: 20 },
+  );
+  const spinnerVisible = await touchPage.locator(".action-bar .spinner").isVisible();
+  const addMoreDisabled = await touchPage.getByRole("button", { name: "Add more", exact: true }).isDisabled();
+  const liveBusy = (await touchPage.locator("#live-region").textContent()).trim();
+  assert(spinnerVisible, "touch: spinner not visible during the download busy state");
+  assert(addMoreDisabled, "touch: 'Add more' not disabled during downloads");
+  assert(liveBusy === "Preparing 2 photos", `touch: live region during busy "${liveBusy}", expected "Preparing 2 photos"`);
+  await shot(touchPage, "05a-download-busy-touch.png");
+
+  const touchDeadline = Date.now() + STEP_TIMEOUT;
+  while (touchDownloads.length < 2 && Date.now() < touchDeadline) await sleep(50);
+  assert(
+    touchDownloads.length === 2,
+    `touch: expected 2 download events, saw ${touchDownloads.length} (${JSON.stringify(touchDownloads.map((d) => d.name))})`,
+  );
+  const storeOrder = (await debugState(touchPage)).photos
+    .filter((p) => p.name === FIX.sharpText.name || p.name === FIX.blurredCheckerboard.name)
+    .map((p) => p.name);
+  assert(
+    touchDownloads[0].name === storeOrder[0] && touchDownloads[1].name === storeOrder[1],
+    `touch: download names/order ${JSON.stringify(touchDownloads.map((d) => d.name))}, expected ${JSON.stringify(storeOrder)}`,
+  );
+  for (const d of touchDownloads) {
+    const expectedBuffer = d.name === FIX.sharpText.name ? FIX.sharpText.buffer : FIX.blurredCheckerboard.buffer;
+    const saved = fs.readFileSync(await d.download.path());
+    assert(
+      saved.length === expectedBuffer.length && saved.equals(expectedBuffer),
+      `touch: saved "${d.name}" differs from the original file`,
+    );
+  }
+  await touchPage.waitForFunction(
+    () => {
+      const btn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith("Download selected"));
+      return !!btn && !btn.disabled;
+    },
+    null,
+    { timeout: STEP_TIMEOUT, polling: 50 },
+  );
+  const liveAfterTouch = (await touchPage.locator("#live-region").textContent()).trim();
+  assert(liveAfterTouch === "Saved 2 photos", `touch: live region after downloads "${liveAfterTouch}"`);
+  assert(touchIssues.length === 0, `touch: page errors ${JSON.stringify(touchIssues)}`);
+  await touchPage.close();
+
+  return `desktop: 2 selected → one organized zip "${downloads[0].name}" (2 band-folder entries, byte-identical); touch-emulated: 2 individual downloads in store order (byte-identical) with the deterministic busy state (spinner + Add more disabled + live "Preparing 2 photos" → "Saved 2 photos")`;
 }
+
 
 /* ------------------------------------------------------------------ */
 /* P6 — detail view: dialog label, nav, Select pattern, per-item DL    */

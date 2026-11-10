@@ -6,8 +6,10 @@
  *   - "Add more" (secondary; re-enters intake for newly added files only)
  *   - "Save HD copies" (secondary; opens the §11.3.4 batch converter dialog
  *     over the current selection)
- *   - "Download selected" (primary; sequential anchor downloads of the
- *     original File objects — Decision Record route A, no zip library)
+ *   - "Download selected" (primary; on desktop the picked photos arrive as
+ *     ONE organized ZIP — band folders inside, duplicates suffixed; on
+ *     touch-primary devices they keep the sequential gallery-friendly
+ *     individual downloads. A single photo always downloads as itself)
  *   - the §13 device-reality line: the app cannot delete from the phone
  *   - busy state during downloads: primary label "Preparing…" with the one
  *     permitted inline spinner; "Add more" disabled while it runs
@@ -16,10 +18,25 @@
  * count (App pushes updates) and asks the provider for the selected files.
  */
 
-import { EXPORT_FORMATS, EXPORT_FORMAT_DEFAULT, MAX_UPSCALE_FACTOR, SHARPEN_LEVELS, SHARPEN_DEFAULT, exportName, hdOutputSpec } from "./Thresholds.js";
+import { EXPORT_FORMATS, EXPORT_FORMAT_DEFAULT, MAX_UPSCALE_FACTOR, SHARPEN_LEVELS, SHARPEN_DEFAULT, BAND_LABELS, exportName, hdOutputSpec } from "./Thresholds.js";
+import { buildZipBlob, zipEntryName } from "./ZipWriter.js";
 
 const DOWNLOAD_SPACING_MS = 350; // sequential clicks; probe-downloads.js confirmed every download fires at this spacing
 const URL_REVOKE_DELAY_MS = 10000; // anchor downloads start within ms; revoke after use (memory rule), never leak
+/* v0.6.0 bundled download (plan §11): archive names for the two
+   multi-photo paths. Photos land in band folders inside the archive. */
+const BUNDLED_PHOTOS_ZIP = "blurry-photo-cleaner-photos.zip";
+const BUNDLED_HD_ZIP = "blurry-photo-cleaner-hd-copies.zip";
+
+/* §7.3 pointer-vs-touch precedent (the hidden drop hint uses the same
+   media query): touch-primary devices keep the gallery-friendly INDIVIDUAL
+   downloads — photos inside a ZIP land in the phone's Files app, not the
+   gallery, and extraction is extra steps. Desktop (fine pointer) gets the
+   one organized folder the user asked for: no more one-at-a-time anchor
+   clicks (which browsers throttle — the probe-downloads evidence). */
+function usesIndividualDownloads() {
+  return window.matchMedia("(hover: none), (pointer: coarse)").matches;
+}
 // UX F8: the selection summary is announced through the polite live region
 // only after the count has settled for this long (trailing-edge debounce).
 // A band "Select all" re-renders the bar through one setSummary call per
@@ -373,28 +390,70 @@ export class ReviewControls {
     const n = photos.length;
     this.#announce?.(`Preparing ${n} ${n === 1 ? "photo" : "photos"}`);
 
+    /* v0.6.0 (plan §11, user request): desktop multi-select downloads ONE
+       organized ZIP instead of N paced anchor clicks. Touch-primary devices
+       keep the individual gallery-friendly saves, and a single photo always
+       downloads as itself — a one-photo ZIP would be pure friction. */
+    const individual = usesIndividualDownloads() || photos.length === 1;
+
     try {
-      if (formatId === "original") {
-        for (const photo of photos) {
-          triggerAnchorDownload(photo.file);
-          await sleep(DOWNLOAD_SPACING_MS);
+      if (individual) {
+        if (formatId === "original") {
+          for (const photo of photos) {
+            triggerAnchorDownload(photo.file);
+            await sleep(DOWNLOAD_SPACING_MS);
+          }
+        } else {
+          // Re-encode through the pool (parallel): 1× = same pixel size, the
+          // chosen codec. Each file downloads as its conversion finishes.
+          const convert = this.#getConverter?.();
+          if (!convert) {
+            throw new Error("Converter unavailable");
+          }
+          const jobs = photos.map((photo) =>
+            convert
+              .convert(photo, 1, { sharpen: 0, format: formatId })
+              .then((result) => {
+                triggerAnchorBlobDownload(result.blob, exportName(photo.name, formatId));
+              })
+              .catch(() => { /* one failed photo never blocks the rest */ }),
+          );
+          await Promise.all(jobs);
         }
       } else {
-        // Re-encode through the pool (parallel): 1× = same pixel size, the
-        // chosen codec. Each file downloads as its conversion finishes.
+        // Desktop: collect every photo's bytes (originals read as-is; the
+        // chosen re-encode format runs through the same pool), then one
+        // archive with the review's band folders inside.
         const convert = this.#getConverter?.();
-        if (!convert) {
+        if (formatId !== "original" && !convert) {
           throw new Error("Converter unavailable");
         }
         const jobs = photos.map((photo) =>
-          convert
-            .convert(photo, 1, { sharpen: 0, format: formatId })
-            .then((result) => {
-              triggerAnchorBlobDownload(result.blob, exportName(photo.name, formatId));
-            })
-            .catch(() => { /* one failed photo never blocks the rest */ }),
+          (async () => {
+            if (formatId === "original") {
+              return { photo, bytes: new Uint8Array(await photo.file.arrayBuffer()), name: photo.name };
+            }
+            const result = await convert.convert(photo, 1, { sharpen: 0, format: formatId });
+            return {
+              photo,
+              bytes: new Uint8Array(await result.blob.arrayBuffer()),
+              name: exportName(photo.name, formatId),
+            };
+          })().catch(() => null), // one failed photo never blocks the rest
         );
-        await Promise.all(jobs);
+        const settled = (await Promise.all(jobs)).filter(Boolean);
+        if (settled.length === 0) {
+          // Every photo failed to prepare — announce it; the trailing
+          // "Saved N photos" must not fire (finally still resets the bar).
+          this.#announce?.("Nothing could be saved — the photos could not be prepared.");
+          return;
+        }
+        const seen = new Map();
+        const entries = settled.map(({ photo, bytes, name }) => ({
+          name: zipEntryName(BAND_LABELS[photo.band] ?? "", name, seen),
+          bytes,
+        }));
+        triggerAnchorBlobDownload(buildZipBlob(entries), BUNDLED_PHOTOS_ZIP);
       }
     } finally {
       this.#busy = false;
@@ -617,7 +676,11 @@ export class ExportChooser {
 const HD_COPY = {
   heading: "Save HD copies",
   honesty: "Upscaled — enlarged, same captured detail.",
-  scope: "Preview first — nothing is saved until you choose Download. A downloaded copy is scored fresh and joins the review next to its original.",
+  // v0.5.3 (plan §9): the old scope claimed a downloaded copy "joins the
+  // review next to its original" — the batch flow has never done that (it
+  // converts and downloads only; only the per-photo panel's Keep/Download
+  // adds copies to the review). The claim is replaced with the true scope.
+  scope: "Converted copies download. They are not added to the review.",
   clampNote: "Photos above this browser's canvas limit save at their largest supported size.",
   helper: "Pick a larger size to save a copy.",
   apply: "Convert and save",
@@ -895,12 +958,23 @@ class BatchHDDialog {
     // ~10 events). Completed conversions queue their downloads on this
     // chain and leave DOWNLOAD_SPACING_MS apart — parallel decode, paced
     // saves (the v0.2.1 probe-downloads evidence).
+    //
+    // v0.6.0 (plan §11): on DESKTOP the pacing chain disappears entirely —
+    // the copies are collected and saved as ONE organized ZIP (no anchor
+    // throttling to work around). Touch-primary devices keep the paced
+    // per-file saves (gallery-friendly; §7.3 precedent).
     let downloadChain = Promise.resolve();
+    const savedEntries = []; // desktop: { name, bytes } — one archive at the end
+    const touchSaves = usesIndividualDownloads();
     const queueDownload = (blob, name) => {
-      downloadChain = downloadChain.then(async () => {
-        triggerAnchorBlobDownload(blob, name);
-        await sleep(DOWNLOAD_SPACING_MS);
-      });
+      if (touchSaves) {
+        downloadChain = downloadChain.then(async () => {
+          triggerAnchorBlobDownload(blob, name);
+          await sleep(DOWNLOAD_SPACING_MS);
+        });
+      } else {
+        savedEntries.push({ name, blob });
+      }
     };
     this.#renderProcessing(1, total, photos[0]?.name ?? "");
     const jobs = photos.map((photo, index) =>
@@ -942,6 +1016,32 @@ class BatchHDDialog {
     );
     await Promise.all(jobs);
     await downloadChain; // every queued anchor click has fired (paced)
+
+    // v0.6.0: desktop — one organized archive for every copy that converted
+    // (a single copy downloads as itself). A failure here must not lose the
+    // user's saved state, so it surfaces as the partial-done disclosure.
+    if (!touchSaves && savedEntries.length > 1) {
+      try {
+        const seen = new Map();
+        const entries = [];
+        for (const { name, blob } of savedEntries) {
+          entries.push({
+            name: zipEntryName("", name, seen),
+            bytes: new Uint8Array(await blob.arrayBuffer()),
+          });
+        }
+        triggerAnchorBlobDownload(buildZipBlob(entries), BUNDLED_HD_ZIP);
+      } catch {
+        // The archive could not be built — fall back to the paced per-file
+        // saves rather than losing the already-converted copies.
+        for (const { name, blob } of savedEntries) {
+          triggerAnchorBlobDownload(blob, name);
+          await sleep(DOWNLOAD_SPACING_MS);
+        }
+      }
+    } else if (!touchSaves && savedEntries.length === 1) {
+      triggerAnchorBlobDownload(savedEntries[0].blob, savedEntries[0].name);
+    }
 
     this.#remaining = [];
     this.#state = "done";

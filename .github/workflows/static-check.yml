@@ -57,7 +57,8 @@ jobs:
       #   js/main.js       -> App, PhotoStore, UploadView
       #   (transitively)   -> ResultsView, ReviewControls, BlurAnalyzer,
       #                       Thresholds, and blur-worker.js (module worker
-      #                       loaded by BlurAnalyzer via new URL(...))
+      #                       loaded by BlurAnalyzer via new URL(...));
+      #                       ZipWriter (bundled download, v0.6.0)
       #   docs/report.html -> docs/report.css, docs/assets/figure1-system-flow.svg,
       #                       docs/assets/screenshot-1..5-*.png
       - name: Assert every referenced URL returns HTTP 200
@@ -77,7 +78,8 @@ jobs:
             "/js/blur-worker.js"
             "/js/HDConverter.js"
             "/js/upscale-worker.js"
-            "/js/DeleteConfirmDialog.js"
+            "            "/js/DeleteConfirmDialog.js"
+            "/js/ZipWriter.js""
             "/assets/mark.svg"
             "/docs/report.html"
             "/docs/report.docx"

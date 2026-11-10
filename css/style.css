@@ -1456,6 +1456,35 @@ img {
   min-height: 0;
 }
 
+/* --------------------------------------------------------------------------
+   FULL-SIZE FOCUS MODE (§4.4 extension, 2026-11-10, plan §10): clicking the
+   stage photo (or Enter/Space on it) expands the stage to the full panel —
+   the top bar stays (Done + filename + Select); the converter panel and the
+   bottom bar yield while focused. The before/after wipe stays mounted and
+   draggable in this mode; Esc or a second activation restores the view.
+   Instant display/flex toggle — no animation, reduced-motion safe by
+   construction. Declared AFTER the has-hd-panel cap so the same-specificity
+   stage-wrap rules resolve in the focused mode's favor.
+   -------------------------------------------------------------------------- */
+.detail__img {
+  cursor: zoom-in;
+}
+
+.detail__panel.is-focus .detail__img {
+  cursor: zoom-out;
+}
+
+.detail__panel.is-focus .detail__stage-wrap {
+  flex: 1 1 auto;
+  min-height: 0;    /* defeats the has-hd-panel 160px floor while focused */
+  max-height: none; /* defeats the has-hd-panel 240px cap while focused */
+}
+
+.detail__panel.is-focus .detail__bottom,
+.detail__panel.is-focus .hd-panel {
+  display: none;
+}
+
 .detail__after {
   position: absolute;
   inset: 0;

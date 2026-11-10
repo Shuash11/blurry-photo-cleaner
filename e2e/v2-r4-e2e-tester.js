@@ -784,27 +784,35 @@ async function runState(id, title, fn) {
         && pressed.every((v) => v === "true"), JSON.stringify({ summary, pressed }));
       await shot(page, "s8-selected");
 
-      // Download selected → two downloads, byte-identical to the originals.
-      // Collect via page.on (two simultaneous waitForEvent promises would both
-      // resolve on the FIRST event — a collector is the correct pattern).
+      // Download selected → v0.6.0: ONE organized zip; the two Blurry
+      // photos land in the "Blurry/" folder, byte-identical to the sources.
+      // Collect via page.on (a collector is the correct pattern).
       const downloads = [];
       page.on("download", (d) => downloads.push(d));
       await page.getByRole("button", { name: /^Download selected/ }).click();
       // v0.3.0 re-scope: the export chooser opens — pick Original.
       await page.getByRole("button", { name: /^Original/ }).click();
       const dlDeadline = Date.now() + DOWNLOAD_TIMEOUT;
-      while (downloads.length < 2 && Date.now() < dlDeadline) {
+      while (downloads.length < 1 && Date.now() < dlDeadline) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      if (downloads.length !== 2) throw new Error(`expected 2 download events, saw ${downloads.length}`);
-      const savedNames = downloads.map((d) => d.suggestedFilename());
-      const downloadedBytes = [];
-      for (const d of downloads) downloadedBytes.push(fs.readFileSync(await d.path()));
-      const expectedByName = new Map(FIXTURES.map((f) => [f.name, f.buffer]));
-      const bytesOk = savedNames.every((n) => expectedByName.has(n))
-        && downloadedBytes.every((buf, i) => buf.equals(expectedByName.get(savedNames[i])));
-      expect("2 downloads with the original names, content byte-identical to the source files", bytesOk,
-        JSON.stringify({ savedNames, sizes: downloadedBytes.map((b) => b.length) }));
+      if (downloads.length !== 1) throw new Error(`expected 1 zip download, saw ${downloads.length}`);
+      const zipName = downloads[0].suggestedFilename();
+      const { parseZip } = require("./zip-read.js");
+      const entries = parseZip(await downloads[0].path());
+      const expectedEntries = new Map([
+        ["Blurry/fixture-blurred-checkerboard.png", "fixture-blurred-checkerboard.png"],
+        ["Blurry/fixture-blurred-text.png", "fixture-blurred-text.png"],
+      ]);
+      const bufferBySource = new Map(FIXTURES.map((f) => [f.name, f.buffer]));
+      const bytesOk = zipName === "blurry-photo-cleaner-photos.zip"
+        && entries.length === 2
+        && entries.every((e) => {
+          const source = expectedEntries.get(e.name);
+          return source && e.data.equals(bufferBySource.get(source));
+        });
+      expect("one zip with the 2 blurry photos in the Blurry folder, byte-identical to the source files", bytesOk,
+        JSON.stringify({ zipName, names: entries.map((e) => e.name) }));
 
       // Start over → cleared + every thumbnail object URL revoked.
       const thumbSrcs = await page.$$eval(".photo-grid img", (imgs) => imgs.map((img) => img.src));
@@ -819,7 +827,7 @@ async function runState(id, title, fn) {
       expect("Start over raised the native confirm dialog (accepted)", soDialog.some((d) => d.type === "confirm" && /Start over\?/.test(d.message)),
         JSON.stringify(soDialog));
       await shot(page, "s8-after-startover");
-      return JSON.stringify({ summary, savedNames });
+      return JSON.stringify({ summary, zipName });
     });
 
     /* ================================================================ */

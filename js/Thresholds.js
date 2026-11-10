@@ -100,6 +100,17 @@ export const BAND_REVIEW = "review";
 export const BAND_SHARP = "sharp";
 export const BAND_SKIPPED = "skipped"; // analysis skipped (no visible pixels / too small)
 
+/* Display labels — THE shared source (v0.6.0): the results band sections,
+   App's HD-copy announcements, and the bundled download's ZIP folders all
+   read this map, so the word on screen, the word in the live region, and
+   the folder name in the archive can never drift. */
+export const BAND_LABELS = {
+  [BAND_BLURRY]: "Blurry",
+  [BAND_REVIEW]: "Needs review",
+  [BAND_SHARP]: "Sharp",
+  [BAND_SKIPPED]: "Skipped",
+};
+
 /* ── Intake caps (plan v2 INF-1) ────────────────────────────────────────── */
 
 /* Per-file size cap: 50 MB. Files strictly over this are skipped at intake
