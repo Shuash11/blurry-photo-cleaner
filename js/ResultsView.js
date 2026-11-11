@@ -21,7 +21,7 @@
  * Selection persists across re-renders (e.g. "Add more" re-analysis).
  */
 
-import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED, BAND_LABELS, MAX_UPSCALE_FACTOR, JPEG_QUALITY, formatPercent, hdOutputSpec, upscaleDimensions, SHARPEN_LEVELS, SHARPEN_DEFAULT, EXPORT_FORMATS, exportName } from "./Thresholds.js";
+import { BAND_BLURRY, BAND_REVIEW, BAND_SHARP, BAND_SKIPPED, BAND_LABELS, MAX_UPSCALE_FACTOR, JPEG_QUALITY, formatPercent, formatBytes, hdOutputSpec, upscaleDimensions, SHARPEN_LEVELS, SHARPEN_DEFAULT, EXPORT_FORMATS, exportName } from "./Thresholds.js";
 import { triggerAnchorDownload, triggerAnchorBlobDownload, buildHDSliderRow, buildChoiceRow, ExportChooser } from "./ReviewControls.js";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog.js";
 
@@ -56,22 +56,10 @@ const FOCUS_COPY = {
 };
 const FOCUS_DRAG_SLACK_PX = 6; // a stage press that traveled farther is a drag/swipe, not a click
 
-/** §11.5 file-size caption (detail view): compact byte formatting, the same
- *  "141 KB" style the v1 tiles used. Module-private — Thresholds owns the
- *  score/percent formats; bytes are a view concern. */
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes < 0) {
-    return "";
-  }
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  const kb = bytes / 1024;
-  if (kb < 1024) {
-    return `${Math.round(kb)} KB`;
-  }
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
+/* §11.5 file-size caption (detail view): bytes are formatted by the shared
+ *  formatBytes in Thresholds.js (v0.7.0 — the export chooser's per-format
+ *  size labels need the same compact style, so the helper moved to the
+ *  one display-format module the whole app shares). */
 
 export class ResultsView {
   #root;
@@ -642,6 +630,12 @@ class PhotoDetailView {
   #touchStart = null;
   #previewStageURL = null; // v0.3.0: the HD-preview swap on the stage
   #exportChooser = null; // v0.3.0: the per-photo export format chooser
+  /* v0.7.0 (user request: "add how many MB when downloading — webp/png/jpg
+     sizes vary"): measured per-format output sizes for the chooser, cached
+     per photo record (WeakMap → Map formatId → bytes or null). Only the
+     NUMBER is cached — the blobs themselves stay downloads-and-forgotten
+     (§11.3.7 memory rule); a re-download re-encodes as before. */
+  #sizeCache = new WeakMap();
   // v0.4.1 before/after wipe (user request)
   #stageEl = null;
   #afterLayer = null;
@@ -1506,6 +1500,11 @@ class PhotoDetailView {
    * export chooser (Original / PNG / JPEG / WebP). "original" keeps the
    * v0.1 byte-identical behavior; a re-encode format runs the photo
    * through the converter at 1× and names it via Thresholds.exportName.
+   *
+   * v0.7.0: the chooser also shows each option's file size (user request:
+   * "add how many MB … webp? png? and jpg since its picking what format
+   * then the sizes may vary"). The sizes come from #exportSizeProvider —
+   * the exact numbers the actual download will produce, not estimates.
    */
   #downloadCurrent() {
     if (this.#busy || !this.#photo) {
@@ -1515,7 +1514,48 @@ class PhotoDetailView {
     this.#exportChooser.open({
       trigger: this.#downloadBtn,
       onChoose: (formatId) => this.#runCurrentDownload(formatId),
+      sizes: this.#exportSizeProvider(this.#photo),
     });
+  }
+
+  /**
+   * v0.7.0: the chooser's size source. Returns bytes for a format id, or
+   * null when the size cannot be shown (the chooser then renders no size).
+   *   - "original" → the source File's own byte size (synchronous truth);
+   *   - png/jpeg/webp → the photo is actually encoded at 1× through the
+   *     SAME converter path the download runs — so the number shown is the
+   *     saved file's real size, not a formula. Measured lazily per open,
+   *     cached per photo so re-opening the chooser is instant.
+   * A failed measurement resolves null (the chooser shows no size); the
+   * download path still runs its own conversion and error handling.
+   */
+  #exportSizeProvider(photo) {
+    return async (formatId) => {
+      if (formatId === "original") {
+        return Number.isFinite(photo.size) && photo.size >= 0 ? photo.size : null;
+      }
+      const cached = this.#sizeCache.get(photo)?.get(formatId);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const converter = this.#callbacks.getConverter?.();
+      if (!converter) {
+        return null;
+      }
+      try {
+        const result = await converter.convert(photo, 1, { sharpen: 0, format: formatId });
+        const bytes = result.blob.size;
+        let cache = this.#sizeCache.get(photo);
+        if (!cache) {
+          cache = new Map();
+          this.#sizeCache.set(photo, cache);
+        }
+        cache.set(formatId, bytes);
+        return bytes;
+      } catch {
+        return null; // measurement failed — no size label; download still works
+      }
+    };
   }
 
   async #runCurrentDownload(formatId) {

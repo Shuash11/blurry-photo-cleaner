@@ -18,7 +18,7 @@
  * count (App pushes updates) and asks the provider for the selected files.
  */
 
-import { EXPORT_FORMATS, EXPORT_FORMAT_DEFAULT, MAX_UPSCALE_FACTOR, SHARPEN_LEVELS, SHARPEN_DEFAULT, BAND_LABELS, exportName, hdOutputSpec } from "./Thresholds.js";
+import { EXPORT_FORMATS, EXPORT_FORMAT_DEFAULT, MAX_UPSCALE_FACTOR, SHARPEN_LEVELS, SHARPEN_DEFAULT, BAND_LABELS, exportName, hdOutputSpec, formatBytes } from "./Thresholds.js";
 import { buildZipBlob, zipEntryName } from "./ZipWriter.js";
 
 const DOWNLOAD_SPACING_MS = 350; // sequential clicks; probe-downloads.js confirmed every download fires at this spacing
@@ -563,14 +563,24 @@ export function buildChoiceRow({ label, name, options, value, onInput }) {
  * (byte-identical) / PNG / JPEG / WebP; remembers the last pick for the
  * session (module state, never localStorage — the storage rule). Reuses the
  * confirm-dialog surface (.confirm/.confirm__panel) with option buttons.
+ *
+ * v0.7.0 (user request: "add how many MB when downloading — webp? png? and
+ * jpg since its picking what format then the sizes may vary"): pass
+ * `sizes` — an async (formatId) → bytes-or-null source — and every option
+ * carries a size label. Labels start as "Measuring…" and settle on the
+ * real saved-file size; a null resolves to no label (measurement failed).
+ * The chooser owns only the rendering: stale writes are orphaned by a seq
+ * guard on close, and the numbers themselves come from the caller (the
+ * detail view measures through the very converter path the download uses).
  */
 let lastExportFormat = EXPORT_FORMAT_DEFAULT;
 
 export class ExportChooser {
   #root = null;
   #trigger = null;
+  #sizeSeq = 0; // v0.7.0: a close re-orphans every in-flight size write
 
-  open({ trigger = null, onChoose }) {
+  open({ trigger = null, onChoose, sizes = null }) {
     this.close();
     this.#trigger = trigger ?? null;
 
@@ -623,10 +633,15 @@ export class ExportChooser {
 
     const note = document.createElement("p");
     note.className = "confirm__text";
-    note.textContent = "Original saves the file exactly as it is. The other formats re-encode it at the same pixel size.";
+    // v0.7.0: with a size source present, say what the per-option numbers
+    // are — the actual saved file's size, not a generic estimate.
+    note.textContent = sizes
+      ? "Original saves the file exactly as it is. The other formats re-encode it at the same pixel size — the size shown on each option is the actual size of the file you will get."
+      : "Original saves the file exactly as it is. The other formats re-encode it at the same pixel size.";
     panel.appendChild(note);
 
     let firstBtn = null;
+    const sizeEls = new Map(); // formatId → the size span awaiting its number
     for (const format of EXPORT_FORMATS) {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -635,12 +650,26 @@ export class ExportChooser {
       label.className = "export-choice__label";
       label.textContent = format.label;
       btn.appendChild(label);
+      // v0.7.0: one right-side meta row carries the measured size and the
+      // "last used" pill — space-between keeps it label | meta, and the
+      // pill never has to fight the size text for its slot.
+      const meta = document.createElement("span");
+      meta.className = "export-choice__meta";
+      if (sizes) {
+        const size = document.createElement("span");
+        size.className = "export-choice__size";
+        size.textContent = "Measuring…";
+        size.title = "Size of the file this option saves";
+        meta.appendChild(size);
+        sizeEls.set(format.id, size);
+      }
       if (format.id === lastExportFormat) {
         const current = document.createElement("span");
         current.className = "export-choice__hint";
         current.textContent = "last used";
-        btn.appendChild(current);
+        meta.appendChild(current);
       }
+      btn.appendChild(meta);
       btn.addEventListener("click", () => {
         lastExportFormat = format.id;
         const choose = onChoose;
@@ -655,6 +684,22 @@ export class ExportChooser {
       firstBtn ??= btn;
     }
 
+    // v0.7.0: fill the size labels in the background — the measurement is
+    // the caller's encode of this exact photo (never a formula), so a
+    // large photo settles its labels a moment after the sheet appears.
+    // The seq + isConnected guards skip writes orphaned by close/re-open.
+    if (sizes) {
+      const seq = ++this.#sizeSeq;
+      for (const [formatId, el] of sizeEls) {
+        Promise.resolve(sizes(formatId)).then((bytes) => {
+          if (seq !== this.#sizeSeq || !el.isConnected) {
+            return; // the chooser closed (or re-opened) — the label is gone
+          }
+          el.textContent = formatBytes(bytes); // null/invalid → no label
+        });
+      }
+    }
+
     root.appendChild(panel);
     document.body.appendChild(root);
     firstBtn?.focus();
@@ -664,6 +709,7 @@ export class ExportChooser {
     if (!this.#root) {
       return;
     }
+    this.#sizeSeq += 1; // v0.7.0: any in-flight size write is now stale
     this.#root.remove();
     this.#root = null;
     if (restoreFocus && this.#trigger && document.contains(this.#trigger)) {

@@ -2617,6 +2617,28 @@ img {
   font-weight: 600;
 }
 
+/* v0.7.0 (user request: per-format download size): the right side of an
+   export option — the measured size text + the "last used" pill share one
+   row, so the option's space-between layout stays label | meta. */
+.export-choice__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-shrink: 0;
+}
+
+/* The size label: secondary text (7.11:1 worst case, same token as the
+   hint pill), tabular-nums so the four options' numbers align down the
+   sheet; nowrap keeps "1.4 MB" from wrapping mid-value on narrow sheets. */
+.export-choice__size {
+  font-size: var(--text-caption-1);
+  line-height: var(--line-caption-1);
+  letter-spacing: var(--track-caption-1);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* Pointer-device density (§7): the 32/36px sizes apply ONLY when the pointer
    is fine. A coarse pointer (tablet) keeps the 44px base values at every
    viewport width — no coarse override exists, because the base rules already

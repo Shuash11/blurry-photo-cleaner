@@ -306,6 +306,27 @@ export function formatPercent(score) {
   return `${score}% sharp`;
 }
 
+/**
+ * Bytes → display text: "141 KB" / "1.4 MB" (the same compact style the
+ * detail view's file-size caption has always used). One shared helper so
+ * the detail caption and the export chooser's per-format size labels
+ * cannot drift apart (the formatPercent precedent: display copy derived
+ * at one source). Invalid input renders "" — callers decide what to show.
+ */
+export function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return "";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${Math.round(kb)} KB`;
+  }
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
 /** Score → band id (constants above). */
 export function bandForScore(score) {
   if (score < SCORE_BLURRY_MAX) {
